@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import com.wangzan101.mika.R
+import com.wangzan101.mika.core.shell.BuiltinShellFix
 import com.wangzan101.mika.core.shell.BuiltinShellStatus
 import com.wangzan101.mika.core.shell.PairingChannelHealth
 import com.wangzan101.mika.core.shell.PairingDiscovery
@@ -29,16 +30,19 @@ sealed interface PairingNotice {
     companion object {
         /**
          * 只在用户正在配对的这段时间里用([PairingCoordinator] 开着时)。找到配对窗口才弹输入框;
-         * 配对阶段的失败(码不对、过期、窗口关了)留在通知里重填,别的失败请用户回 Mika。
+         * 配对阶段的失败(码不对、过期、窗口关了)留在通知里重填;要重新配对的失败(配对失效)找到配对窗口后也给输入框,
+         * 和无障碍读码认的一样(PairingScreen.attempt);别的失败请用户回 Mika。
          */
         fun of(status: BuiltinShellStatus, discovery: PairingDiscovery): PairingNotice? {
             val port = (discovery as? PairingDiscovery.Found)?.port
             return when (status) {
                 BuiltinShellStatus.Running -> Done
                 BuiltinShellStatus.Connecting -> Working
-                is BuiltinShellStatus.Failed ->
-                    if (status.reason.duringPairing) EnterCode(port, PhoneSetupCopy.notifyRetry(status.reason))
-                    else Problem(PhoneSetupCopy.failure(status.reason).title)
+                is BuiltinShellStatus.Failed -> when {
+                    status.reason.duringPairing -> EnterCode(port, PhoneSetupCopy.notifyRetry(status.reason))
+                    status.fix == BuiltinShellFix.RePair && port != null -> EnterCode(port)
+                    else -> Problem(PhoneSetupCopy.failure(status.reason).title)
+                }
                 BuiltinShellStatus.NotPaired, BuiltinShellStatus.WirelessDebuggingOff -> port?.let { EnterCode(it) }
             }
         }
