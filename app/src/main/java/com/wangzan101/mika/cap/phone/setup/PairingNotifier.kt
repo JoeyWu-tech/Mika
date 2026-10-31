@@ -12,6 +12,7 @@ import com.wangzan101.mika.R
 import com.wangzan101.mika.core.shell.BuiltinShellStatus
 import com.wangzan101.mika.core.shell.PairingChannelHealth
 import com.wangzan101.mika.core.shell.PairingDiscovery
+import com.wangzan101.mika.core.shell.PhoneSetupFlow
 import com.wangzan101.mika.ui.MainActivity
 import com.wangzan101.mika.ui.PhoneSetupCopy
 import com.wangzan101.mika.setup.PairingCodeReceiver
@@ -54,6 +55,15 @@ sealed interface PairingNotice {
 
         /** 已经再提醒过 [sent] 次,下一次隔多久;null 表示不再提醒。 */
         fun realertAfter(notice: PairingNotice, sent: Int): Long? = if (notice is EnterCode) REALERT_MS.getOrNull(sent) else null
+
+        /**
+         * [PairingCoordinator] 跟着状态更新通知时的一次计算:这时该显示哪条,显示完是否不再跟。
+         * 填了码、配对还没开始([submitted])时一律是「正在配对」,也不在这时结束(助手原本就在运行也一样,配对开始后状态还会变);
+         * 「重新配对」时运行中的旧状态不算配好([PhoneSetupFlow.effectiveStatus]),助手在运行、又不在重新配对才结束。
+         */
+        fun follow(status: BuiltinShellStatus, discovery: PairingDiscovery, repairing: Boolean, submitted: Boolean): Pair<PairingNotice?, Boolean> =
+            if (submitted) Working to false
+            else of(PhoneSetupFlow.effectiveStatus(status, repairing), discovery) to (status == BuiltinShellStatus.Running && !repairing)
     }
 }
 

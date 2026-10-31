@@ -8,9 +8,7 @@ import android.os.SystemClock
 import com.wangzan101.mika.cap.phone.a11y.ScreenAccessibility
 import com.wangzan101.mika.cap.phone.PhoneServices
 import com.wangzan101.mika.core.shell.BuiltinShellControl
-import com.wangzan101.mika.core.shell.BuiltinShellStatus
 import com.wangzan101.mika.core.shell.PairingCode
-import com.wangzan101.mika.core.shell.PhoneSetupFlow
 import com.wangzan101.mika.ui.PhoneSetupCopy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,15 +41,22 @@ class PairingCoordinator(context: Context, private val control: BuiltinShellCont
     private val _repairing = MutableStateFlow(false)
     /** 用户点了「重新配对」且新的配对还没开始:助手即便在运行也要等新配对。 */
     val repairing: StateFlow<Boolean> = _repairing
+    /**
+     * 填了码、配对还没开始([submit] 起,到 [pair] 把状态改成「正在配对」为止):这段时间通知一律是「正在配对」。
+     * [submit] 里的 [begin] 让找窗口的状态当场回到「在找」,不这样的话通知会按填码前的状态再算一条
+     * (配对失效时是「配对失效了」,填错码后重填时是又响一次的输入框)。跟着状态更新通知也不在这时结束,见 [PairingNotice.follow]。
+     */
+    @Volatile private var submitted = false
 
     fun startRepair() { _repairing.value = true }
 
     fun cancelRepair() { _repairing.value = false }
 
-    /** 开始一次配对:状态一变成「正在配对」就结束重新配对的等待,免得被运行中的旧状态抢先判成已完成。 */
+    /** 开始一次配对:状态一变成「正在配对」就结束重新配对的等待(免得被运行中的旧状态抢先判成已完成)和填码后的等待([submitted])。 */
     suspend fun pair(code: String, port: Int?) = coroutineScope {
         val job = launch(start = CoroutineStart.UNDISPATCHED) { control.startPairing(code, port) }
         _repairing.value = false
+        submitted = false
         job.join()
     }
 
@@ -64,8 +69,14 @@ class PairingCoordinator(context: Context, private val control: BuiltinShellCont
         watch = scope.launch {
             val reader = launch { PairingCodeReader.run(app, control, this@PairingCoordinator) }
             val notices = launch {
-                combine(control.status, control.pairingDiscovery, _repairing) { s, d, r ->
-                    PairingNotice.of(PhoneSetupFlow.effectiveStatus(s, r), d) to (s == BuiltinShellStatus.Running && !r)
+                // 三样各由一个协程送进 combine,送到的先后不一定是改的先后(先改的「正在配对」可能后到):每次都按此刻的值算。
+                // 按写入的反序读,读到后写的值时先写的也一定读得到:submit 先写 submitted 再让找窗口的状态回到「在找」,
+                // pair 先写「正在配对」再清 repairing 和 submitted
+                combine(control.status, control.pairingDiscovery, _repairing) { _, _, _ ->
+                    val d = control.pairingDiscovery.value
+                    val pending = submitted
+                    val r = _repairing.value
+                    PairingNotice.follow(control.status.value, d, r, pending)
                 }
                     .distinctUntilChanged()
                     .transformWhile { emit(it.first); !it.second }
@@ -120,6 +131,7 @@ class PairingCoordinator(context: Context, private val control: BuiltinShellCont
             show(PairingNotice.EnterCode(port, PhoneSetupCopy.NOTIFY_CODE_INVALID))
             return false
         }
+        submitted = true
         begin()
         show(PairingNotice.Working)
         scope.launch { pair(code, port) }

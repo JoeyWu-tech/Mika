@@ -69,6 +69,23 @@ class PairingNoticeTest {
     }
 
     @Test
+    fun aSubmittedCodeShowsPairingUntilThePairingStarts() {
+        val revoked = BuiltinShellStatus.Failed(BuiltinShellFailure.AuthorizationRevoked)
+        // 填了码、配对还没开始:不按填码前的状态算,也不结束(助手原本在运行时也一样,配对开始后状态还会变)
+        assertEquals(PairingNotice.Working to false, PairingNotice.follow(revoked, PairingDiscovery.Searching, repairing = false, submitted = true))
+        assertEquals(PairingNotice.Working to false, PairingNotice.follow(BuiltinShellStatus.Running, PairingDiscovery.Searching, repairing = false, submitted = true))
+        // 没填码时照常按状态算
+        assertEquals(PairingNotice.Problem("配对失效了") to false, PairingNotice.follow(revoked, PairingDiscovery.Searching, repairing = false, submitted = false))
+    }
+
+    @Test
+    fun followingEndsOnlyWhenRunningOutsideARepair() {
+        // 重新配对时运行中的旧状态不算配好:不发、不结束
+        assertEquals(null to false, PairingNotice.follow(BuiltinShellStatus.Running, PairingDiscovery.Searching, repairing = true, submitted = false))
+        assertEquals(PairingNotice.Done to true, PairingNotice.follow(BuiltinShellStatus.Running, PairingDiscovery.Idle, repairing = false, submitted = false))
+    }
+
+    @Test
     fun channelIsCreatedHighWhenMissing() {
         assertEquals(ChannelPlan.Create(PairingChannel.IDS.last()), PairingChannel.plan(emptyList()))
         assertEquals(PairingChannelHealth.Ready, PairingChannel.plan(emptyList()).health)
