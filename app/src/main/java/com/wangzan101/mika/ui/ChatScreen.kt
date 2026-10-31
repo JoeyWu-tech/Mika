@@ -1,6 +1,7 @@
 package com.wangzan101.mika.ui
 
 import androidx.compose.foundation.gestures.scrollBy
+import com.wangzan101.mika.core.agent.QuoteMessage
 import com.wangzan101.mika.core.cap.web.AttachedPage
 import com.wangzan101.mika.ui.components.keepsKeyboard
 import android.content.Context

@@ -1,4 +1,4 @@
-package com.wangzan101.mika.ui
+package com.wangzan101.mika.core.agent
 
 /**
  * 用户的话里引用了前面的一条消息时怎么写:话的最前面一行标明引的是谁的话(固定的英文,模型一看就懂;对话页认这一行),

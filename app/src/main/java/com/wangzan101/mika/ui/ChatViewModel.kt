@@ -12,7 +12,9 @@ import com.wangzan101.mika.chat.SharedFile
 import com.wangzan101.mika.cap.sandbox.ImportResult
 import com.wangzan101.mika.confirm.ConfirmationCopy
 import com.wangzan101.mika.confirm.ConfirmationNotifier
+import com.wangzan101.mika.core.agent.AttachmentLines
 import com.wangzan101.mika.core.agent.Conversation
+import com.wangzan101.mika.core.agent.QuoteMessage
 import com.wangzan101.mika.core.agent.TaskState
 import com.wangzan101.mika.task.TaskGate
 import com.wangzan101.mika.core.agent.Turn
@@ -1171,7 +1173,7 @@ class ChatViewModel(
 
         /** 消息末尾每个附件一行:「附件:/workspace/inbox/<名字>(<大小>)」;[files] 是复制进工作区后的 (路径, 字节数)。 */
         internal fun withAttachments(text: String, files: List<Pair<String, Long>>): String =
-            AttachmentMessage.compose(text, files.map { (p, n) -> p to sizeLabel(n) })
+            AttachmentLines.compose(text, files.map { (p, n) -> p to sizeLabel(n) })
 
         fun sizeLabel(bytes: Long): String = when {
             bytes < 1024 -> "$bytes B"
