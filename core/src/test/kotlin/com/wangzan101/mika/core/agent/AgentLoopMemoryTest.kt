@@ -132,6 +132,71 @@ class AgentLoopMemoryTest {
         return said.all
     }
 
+    // 引了 Mika 的回答:引的那段是 Mika 说的,记忆的引文不认,只收用户打的字
+    @Test fun quotedReplyIsNotTheUserWords() {
+        val s = store()
+        val said = UserUtterances()
+        val save = ModelReply(listOf(Part.ToolCall("c1", "memory_save",
+            """{"kind":"fact","content":"用户的收货地址是幸福路 8 号","quote":"收货地址是幸福路 8 号"}""")), StopReason.ToolUse, null)
+        val model = FakeModel(save, finishReply)
+        runBlocking {
+            AgentLoop(model, toolDispatcher(FakeScreen(), memory = s, utterances = said), "B", memory = s)
+                .run(QuoteMessage.compose(QuoteMessage.Quote(QuoteMessage.From.Mika, MIKA_ADDRESS), "这个地址对不对"))
+        }
+        val result = model.requests[1].last { it.role == Role.Tool }.parts.filterIsInstance<Part.ToolResult>().single().content
+        assertTrue(result, "quote_not_from_user" in result)
+        assertTrue(s.items.value.none { "幸福路" in it.content })
+        assertEquals(listOf("这个地址对不对"), said.all)
+    }
+
+    // 引了自己说过的话:对话页引的是他当时打的字,连那段一起收,记忆的引文照样认
+    @Test fun ownQuoteIsTheUserWords() {
+        val s = store()
+        val said = UserUtterances()
+        val save = ModelReply(listOf(Part.ToolCall("c1", "memory_save",
+            """{"kind":"fact","content":"用户家的猫叫团子","quote":"我家猫叫团子"}""")), StopReason.ToolUse, null)
+        runBlocking {
+            AgentLoop(FakeModel(save, finishReply), toolDispatcher(FakeScreen(), memory = s, utterances = said), "B", memory = s)
+                .run(QuoteMessage.compose(QuoteMessage.Quote(QuoteMessage.From.You, "我家猫叫团子"), "这个记一下"))
+        }
+        assertTrue(s.items.value.any { it.content == "用户家的猫叫团子" })
+        assertEquals(listOf("我家猫叫团子\n这个记一下"), said.all)
+    }
+
+    // 带了附件:附件那几行是 App 写的路径和大小,不收
+    @Test fun attachmentLinesAreNotTheUserWords() {
+        val s = store()
+        val said = UserUtterances()
+        runBlocking {
+            AgentLoop(FakeModel(finishReply), toolDispatcher(FakeScreen(), memory = s, utterances = said), "B", memory = s)
+                .run(AttachmentLines.compose("总结一下", listOf("/workspace/inbox/Quarterly_Financial_Report_Final_v2.pdf" to "2 KB")))
+        }
+        assertEquals(listOf("总结一下"), said.all)
+    }
+
+    // 插话引了 Mika 的回答:只收插话里打的字
+    @Test fun quotedSteerAddsOnlyTheTypedWords() = runBlocking {
+        val s = store()
+        val said = UserUtterances()
+        val inbox = RunInbox().apply { send(RunInput.Steer("m1", QuoteMessage.compose(QuoteMessage.Quote(QuoteMessage.From.Mika, MIKA_ADDRESS), "换成这个"))) }
+        AgentLoop(FakeModel(finishReply), toolDispatcher(FakeScreen(), memory = s, utterances = said), "B", memory = s)
+            .run(RunSpec(RunId("r1"), "帮我下单", "thread-1"), inbox)
+        assertEquals(listOf("帮我下单", "换成这个"), said.all)
+    }
+
+    // 回答追问时引了 Mika 的回答:也只收打的字
+    @Test fun quotedAnswerAddsOnlyTheTypedWords() = runBlocking {
+        val s = store()
+        val said = UserUtterances()
+        val ask = ModelReply(listOf(Part.ToolCall("q1", "ask_user", """{"prompt":"送到哪个地址?"}""")), StopReason.ToolUse, null)
+        val loop = AgentLoop(FakeModel(ask, finishReply, finishReply), toolDispatcher(FakeScreen(), memory = s, utterances = said), "B", memory = s)
+        val run = async { loop.run("帮我下单") }
+        withTimeout(5_000) { loop.state.first { it is TaskState.WaitingInput } }
+        assertTrue(loop.answerInput(QuoteMessage.compose(QuoteMessage.Quote(QuoteMessage.From.Mika, MIKA_ADDRESS), "就这个")))
+        run.await()
+        assertEquals(listOf("帮我下单", "就这个"), said.all)
+    }
+
     @Test fun disabledMeansNoBlockNoTools() {
         val s = store()
         val model = FakeModel(finishReply)
@@ -140,6 +205,11 @@ class AgentLoopMemoryTest {
         assertEquals(listOf("帮我点个外卖"), model.requests.first().withoutRuntime().map { it.text() })
         assertFalse(model.offeredTools.first().any { it.startsWith("memory_") })
         assertTrue(loop.usedMemoryIds.isEmpty())
+    }
+
+    private companion object {
+        /** 用户引的 Mika 之前的一句回答。 */
+        const val MIKA_ADDRESS = "你常用的收货地址是幸福路 8 号"
     }
 }
 

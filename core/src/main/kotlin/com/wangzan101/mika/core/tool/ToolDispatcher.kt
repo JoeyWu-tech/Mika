@@ -101,7 +101,7 @@ class ToolDispatcher internal constructor(
     fun preload(task: String, previous: Collection<String>): List<String> =
         capabilities.filter { it.folds && (it.id in previous || it.preload(task)) }.map { it.id }.filter(::expand)
 
-    /** 用户这句话里他自己打的字:和各能力有关的说明去掉(见 [Capability.userWords])。 */
+    /** 用户这句话去掉各能力的说明(见 [Capability.userWords]);他这次打的字还要再去掉引用和附件行,见 [com.wangzan101.mika.core.agent.UserWords.typed]。 */
     fun userWords(text: String): String = capabilities.fold(text) { t, c -> c.userWords(t) }
 
     private fun openSet(): Set<String> = expanded.let { e -> if (e.any { it in screenGroups }) e + ToolGroups.SCREENS else e }

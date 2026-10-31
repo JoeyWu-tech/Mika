@@ -175,7 +175,10 @@ class AgentLoop(
     /** 这次的原话给模型时的样子(带着屏幕时换成了说明,见 [UserScreenTurns]);还没开始为 null。判结局、提取记忆按它读。 */
     @Volatile var taskText: String? = null
         private set
-    /** 用户最近一句话(开局原话或插话)里他自己打的字,见 [ownWords];插话里只发了屏幕、只选了字时沿用上一句的。语言提示和回答的语言检查按它,记忆引文也只收这些字。 */
+    /**
+     * 用户最近一句话(开局原话或插话)里他这次打的字,见 [ownWords];插话里没打字(只发了屏幕、只选了字)时沿用上一句的。
+     * 语言提示和回答的语言检查按它;记忆、技能的引文收的是 [UserWords.said](还认他引的自己说过的话)。
+     */
     private var latestWords = ""
 
     private val _state = MutableStateFlow<TaskState>(TaskState.Idle)
@@ -323,7 +326,7 @@ class AgentLoop(
         earlierGoals = priorTurns.map { it.userText }
         // 之前的轮次只作参考,放在本次任务之前
         val context = Conversation.context(priorTurns)
-        utterances?.add(latestWords)
+        utterances?.add(UserWords.said(opening?.words ?: raw, tools))
         // 记忆块:对话上文之后、任务原文之前;用到的条目由代码记下
         usedMemory = emptyList()
         // 上次没读出记忆文件(密钥库一时不可用)就再读一次;还读不出就这次不带记忆
@@ -719,10 +722,11 @@ class AgentLoop(
     }
 
     /**
-     * 用户这句话里他自己打的字:屏幕的说明和浏览器页的页面说明先后去掉(两样都带着时也都去掉),都没有时是原话;只发了屏幕、只选了字时为空。
+     * 用户这句话里他这次打的字:屏幕的说明、浏览器页的页面说明、引的那一段和附件行先后去掉(见 [UserWords.typed];几样都带着时都去掉),
+     * 都没有时是原话;只发了屏幕、只引了一段、只选了字、只带了附件时为空。
      * 给模型的那句带着固定的英文说明、插话标记,后面还可能接着运行时状态,不能拿来判断用户用的语言。
      */
-    private fun ownWords(raw: String, shown: UserScreenTurns.Rendered?): String = tools.userWords(shown?.words ?: raw)
+    private fun ownWords(raw: String, shown: UserScreenTurns.Rendered?): String = UserWords.typed(shown?.words ?: raw, tools)
 
     private suspend fun channelLine(matched: List<KnowledgeEntry>): String? {
         val facts = channelFacts ?: return null
@@ -744,7 +748,7 @@ class AgentLoop(
             if (words.isNotBlank()) latestWords = words
             history += Message(Role.User, listOf(Part.Text("$STEER_MARKER\n${shown?.said ?: update.text}")) + shown?.images.orEmpty(), Author.User)
             shown?.details?.forEach { (source, body) -> history += ctx.userScreen(source, body) }
-            utterances?.add(words)
+            utterances?.add(UserWords.said(shown?.words ?: update.text, tools))
             emit(RunEvent.State(now(), "steer_received", RunEvent.clip(Redactor.text(update.messageId))))
         }
         return updates.isNotEmpty()

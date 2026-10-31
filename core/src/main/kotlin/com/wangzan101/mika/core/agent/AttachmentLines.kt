@@ -2,7 +2,7 @@ package com.wangzan101.mika.core.agent
 
 /**
  * 用户的话里带的附件怎么写:消息末尾每个附件一行「附件:/workspace/inbox/<名字>(<大小>)」,这几行原样存进对话、交给任务。
- * 对话页据此把附件画成照片格子和文件卡片(app 的 AttachmentMessage)。
+ * 对话页据此把附件画成照片格子和文件卡片(app 的 AttachmentMessage);语言提示、回答的语言检查和记忆、技能的引文都不算这几行(见 [UserWords])。
  * 旧对话里的消息也是这个写法。
  */
 object AttachmentLines {
@@ -30,4 +30,7 @@ object AttachmentLines {
         if (files.isEmpty()) return Parsed(emptyList(), text.trim())
         return Parsed(files, rest.joinToString("\n").trim())
     }
+
+    /** 去掉附件行后的话;没有附件行的原样返回。 */
+    fun words(text: String): String = parse(text).let { if (it.files.isEmpty()) text else it.words }
 }
