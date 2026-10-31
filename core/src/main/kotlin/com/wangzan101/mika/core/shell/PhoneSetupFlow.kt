@@ -96,7 +96,8 @@ data class SetupView(
  * 引导页的状态机:每次输入变化(系统设置开关、用户确认、助手状态、找配对窗口的进度)都重新算一遍,不存中间状态。
  * 成功只看助手:连上了就算设置好,不管前面读到什么。前面几步读到做好了就自动打勾;读到没做好、用户也没确认,就停在那一步,
  * 但用户随时可以点「我已经打开了,下一步」往下走,所以哪一步都不会卡死。
- * 读到开关被关掉、又没确认过时,不管助手之前怎样,都退回那一步。
+ * 读到开关被关掉、又没确认过时,不管助手之前怎样,都退回那一步;只有无线调试一步在电脑起的助手停了
+ * ([BuiltinShellFailure.UsbHelperStopped])时报错,不往配对一步走。
  */
 object PhoneSetupFlow {
     /** 配对、连接时可能因为前面的开关没开而失败的几类(配对码不对说明配对窗口开着,不算)。 */
@@ -163,7 +164,13 @@ object PhoneSetupFlow {
         val wirelessConfirmed = SetupStep.WirelessDebugging in i.confirmed
         val wirelessOff = !wirelessConfirmed &&
             (i.wirelessDebugging == false || (i.wirelessDebugging == null && status == BuiltinShellStatus.WirelessDebuggingOff))
-        if (wirelessOff) return guide(SetupStep.WirelessDebugging, i)
+        if (wirelessOff) {
+            // 电脑起的助手停了:就在这一步报错(卡片见 usbFallback),不往配对一步走;引导页到了配对一步会开始找配对窗口、发配对通知
+            return if (status is BuiltinShellStatus.Failed && status.reason == BuiltinShellFailure.UsbHelperStopped) SetupView(
+                SetupPhase.Failed, marks(SetupStep.WirelessDebugging.ordinal, i, current = SetupStep.WirelessDebugging, mark = StepMark.Failed),
+                SetupStep.WirelessDebugging, failure = status,
+            ) else guide(SetupStep.WirelessDebugging, i)
+        }
         // 用户说开了,助手却读到关着、不去连:不一直转圈,指出是哪一步并给回去的按钮
         if (status == BuiltinShellStatus.WirelessDebuggingOff && wirelessConfirmed && i.wirelessDebugging != true) {
             return SetupView(

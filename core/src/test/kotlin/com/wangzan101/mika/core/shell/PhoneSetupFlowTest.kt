@@ -380,4 +380,35 @@ class PhoneSetupFlowTest {
         assertEquals(SetupStep.WirelessDebugging, v.suspect?.step)
         assertTrue(v.usbFallback)
     }
+
+    @Test
+    fun usbHelperStoppedIsReportedAtTheWirelessStep() {
+        // 电脑起的助手停了(多半是重启过,无线调试这时读到关着):就在无线调试一步说停了、给电脑上的命令,这一步不打勾,
+        // 不往配对一步走;系统里没有无线调试这一项的手机也一样
+        val stopped = BuiltinShellStatus.Failed(BuiltinShellFailure.UsbHelperStopped)
+        listOf(atWireless, atWireless.copy(wirelessMissing = true)).forEach { i ->
+            val v = PhoneSetupFlow.view(i.copy(status = stopped))
+            assertEquals(SetupPhase.Failed, v.phase)
+            assertEquals(SetupStep.WirelessDebugging, v.current)
+            assertEquals(stopped, v.failure)
+            assertTrue(v.usbFallback)
+            assertEquals(listOf(StepMark.Done, StepMark.Done, StepMark.Done, StepMark.Failed, StepMark.Todo, StepMark.Todo), v.markList())
+        }
+        // 无线调试开着、或用户说开了:照旧在配对一步报错
+        assertEquals(SetupStep.PairingCode, PhoneSetupFlow.view(switchesOn.copy(status = stopped)).current)
+        assertEquals(SetupStep.PairingCode, PhoneSetupFlow.view(atWireless.copy(status = stopped, confirmed = setOf(SetupStep.WirelessDebugging))).current)
+        // 前面几步照旧先看,也不报错
+        val usbOff = PhoneSetupFlow.view(atWireless.copy(usbDebugging = false, status = stopped))
+        assertEquals(SetupStep.UsbDebugging, usbOff.current)
+        assertNull(usbOff.failure)
+        val a11yOff = PhoneSetupFlow.view(atWireless.copy(accessibility = false, status = stopped))
+        assertEquals(SetupStep.Accessibility, a11yOff.current)
+        assertNull(a11yOff.failure)
+        // 别的失败照旧退回无线调试一步,不报错
+        listOf(BuiltinShellFailure.ConnectFailed, BuiltinShellFailure.HelperStartFailed, BuiltinShellFailure.AuthorizationRevoked).forEach { f ->
+            val v = PhoneSetupFlow.view(atWireless.copy(status = BuiltinShellStatus.Failed(f)))
+            assertEquals(f.name, SetupPhase.Guide, v.phase)
+            assertEquals(f.name, SetupStep.WirelessDebugging, v.current)
+        }
+    }
 }
