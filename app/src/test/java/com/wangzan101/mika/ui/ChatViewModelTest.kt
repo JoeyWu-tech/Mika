@@ -20,6 +20,8 @@ import com.wangzan101.mika.takeover.Takeover
 import com.wangzan101.mika.task.SteerNote
 import com.wangzan101.mika.task.SteerState
 import com.wangzan101.mika.ui.PipPhysics.Corner
+import com.wangzan101.mika.core.cap.web.AttachedPage
+import com.wangzan101.mika.core.userscreen.UserScreenMessage
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -1225,6 +1227,28 @@ class ChatViewModelTest {
         assertNull(vm.editSteer("r"))
         assertFalse(calls.any { it == "withdraw:r" })
         assertEquals(SteerState.Received, vm.ui.value.exchanges.single().steers.last().state)
+    }
+
+    // 悬浮胶囊带着屏幕、浏览器页带着页面说明插的话也显示在对话里:取回编辑会把标记原文放进输入框,只给撤回,不给编辑
+    @Test fun steersWithAScreenOrAPageCanOnlyBeWithdrawn() = runTest {
+        val vm = vm()
+        vm.send("当前任务", ok)
+        emit(TaskState.Running(1, "在做"))
+        val screen = UserScreenMessage.compose("s1", "这个按钮是干什么的")
+        val page = AttachedPage.compose(AttachedPage.Page("https://example.com/a", "标题", "选中的一段"), "这段什么意思")
+        steerFlow.value = listOf(SteerNote("s", screen, SteerState.Received), SteerNote("p", page, SteerState.Received))
+        runCurrent()
+        assertEquals("s", withdrawableSteer(vm.ui.value.exchanges, "m0-s")?.id)
+        assertFalse(editableSteer(screen))
+        assertFalse(editableSteer(page))
+        assertNull(vm.editSteer("s"))
+        assertNull(vm.editSteer("p"))
+        assertFalse(calls.any { it.startsWith("withdraw:") })
+        assertTrue(vm.withdrawSteer("p"))
+        assertEquals(listOf(SteerState.Received, SteerState.Withdrawn), vm.ui.value.exchanges.single().steers.map { it.state })
+        // 只有字和引用的照旧能编辑
+        assertTrue(editableSteer("改这句话"))
+        assertTrue(editableSteer(QuoteMessage.compose(QuoteMessage.Quote(QuoteMessage.From.Mika, "明天有雨"), "改这句话")))
     }
 
     @Test fun withdrawingBeforeTheTaskStartsPreventsLaterDelivery() = runTest {

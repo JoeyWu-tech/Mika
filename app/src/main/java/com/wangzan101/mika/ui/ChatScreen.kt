@@ -394,7 +394,7 @@ fun ChatScreen(
                     }
                 },
                 onDismiss = { closeMenu() },
-                onEdit = if (pending != null && canEdit) ({ closeMenu {
+                onEdit = if (pending != null && canEdit && editableSteer(pending.text)) ({ closeMenu {
                     vm.editSteer(pending.id)?.let { input = it; editRequest++ }
                 } }) else null,
                 onWithdraw = pending?.let { n -> ({ closeMenu { vm.withdrawSteer(n.id) } }) },
@@ -504,7 +504,7 @@ internal fun steersAroundDraft(steers: List<SteerNote>): Pair<List<SteerNote>, L
 }
 
 /**
- * 长按的 [key] 是进行中那一问一答里、模型还没取走的手机插话时给出它,菜单据此提供撤回和编辑。
+ * 长按的 [key] 是进行中那一问一答里、模型还没取走的手机插话时给出它,菜单据此提供撤回和编辑(编辑另看 [editableSteer])。
  * 电脑追加的([SteerNote.remote])不给:编辑会把只归当前任务的话变成手机插话、可能转成下一件事;撤不撤由电脑定。
  */
 internal fun withdrawableSteer(exchanges: List<Exchange>, key: String): SteerNote? = exchanges.mapIndexedNotNull { i, ex ->

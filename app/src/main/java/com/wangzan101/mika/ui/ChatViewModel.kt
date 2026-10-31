@@ -44,6 +44,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.wangzan101.mika.core.tool.ToolIndex
 import com.wangzan101.mika.core.assembly.knownTools
+import com.wangzan101.mika.core.cap.web.AttachedPage
+import com.wangzan101.mika.core.userscreen.UserScreenMessage
 
 /** 界面对任务服务能做的事;真机上由 TaskService 实现,测试里换成记录调用。 */
 interface TaskActions {
@@ -184,6 +186,12 @@ fun steerLabel(state: SteerState): String? = when (state) {
     SteerState.Next -> tr(R.string.steer_next)
     SteerState.Cancelled -> tr(R.string.steer_cancelled)
 }
+
+/**
+ * 插话能不能取回编辑。悬浮胶囊插的带着屏幕、浏览器页上选了字插的带着页面说明,取回来时输入框开头是
+ * `[[screen:…]]` 那一行或几行页面说明原文,删掉就丢了屏幕和页面,改坏就认不出页面,这两种不给编辑。
+ */
+internal fun editableSteer(text: String): Boolean = !UserScreenMessage.has(text) && AttachedPage.parse(text).page == null
 
 /** 结束后收起的那一行:「做了 12 步 · 1 分 20 秒」;不知道用时就只说步数。 */
 fun stepsSummary(ex: Exchange): String =
@@ -712,7 +720,7 @@ class ChatViewModel(
         val ui = _ui.value
         if (ui.quote != null || ui.attachments.isNotEmpty() || ui.importing) return null
         val note = ui.exchanges.getOrNull(liveIndex)?.steers?.firstOrNull { it.id == messageId } ?: return null
-        if (!withdrawSteer(messageId)) return null
+        if (!editableSteer(note.text) || !withdrawSteer(messageId)) return null
         val parsed = QuoteMessage.parse(note.text)
         _ui.update { it.copy(quote = parsed.quote) }
         return parsed.words
