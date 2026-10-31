@@ -55,6 +55,7 @@
     <string name="phone_working">正在配對並連線,幾秒鐘就好</string>
     <string name="phone_success">手機操作已經設定好了</string>
     <string name="phone_success_note">請保持 USB 偵錯開啟;手機重啟後開啟無線偵錯即可自動重連</string>
+    <string name="phone_success_note_usb">請保持 USB 偵錯開啟;手機重啟後要在電腦上再執行一次 USB 啟動指令</string>
     <string name="phone_start_using">開始使用</string>
     <string name="done">完成</string>
     <string name="fail_wrong_code">配對碼不對或已過期</string>

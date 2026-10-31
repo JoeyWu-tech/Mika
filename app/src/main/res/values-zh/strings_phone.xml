@@ -55,6 +55,7 @@
     <string name="phone_working">正在配对并连接,几秒钟就好</string>
     <string name="phone_success">手机操作已经设置好了</string>
     <string name="phone_success_note">请保持 USB 调试开启;手机重启后打开无线调试即可自动重连</string>
+    <string name="phone_success_note_usb">请保持 USB 调试开启;手机重启后要在电脑上再运行一次 USB 启动命令</string>
     <string name="phone_start_using">开始使用</string>
     <string name="done">完成</string>
     <string name="fail_wrong_code">配对码不对或已过期</string>

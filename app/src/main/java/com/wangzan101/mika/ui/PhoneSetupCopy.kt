@@ -114,6 +114,8 @@ object PhoneSetupCopy {
     val CONNECT_PORT_SUBMIT: String get() = tr(R.string.phone_connect_port_submit)
     val SUCCESS_LINE: String get() = tr(R.string.phone_success)
     val SUCCESS_NOTE: String get() = tr(R.string.phone_success_note)
+    /** 成功后底部那句。没配对过时助手是电脑起的,重启后 Mika 自己起不来,不说打开无线调试就能重连。 */
+    fun successNote(paired: Boolean): String = if (paired) SUCCESS_NOTE else tr(R.string.phone_success_note_usb)
     /** 首次上手最后一步成功后的底部按钮;从设置进来的是 [SUCCESS_DONE]。 */
     val START_USING: String get() = tr(R.string.phone_start_using)
     val SUCCESS_DONE: String get() = tr(R.string.done)

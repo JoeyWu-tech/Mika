@@ -210,6 +210,7 @@ fun PhoneSetupScreen(status: SystemStatus, repair: Boolean, onFix: (Fix) -> Unit
             }
         },
         usbCommand = usbCommand,
+        paired = phone.shellControl.paired,
         onAskUsb = { usbAsked = true },
         onCopyUsbCommand = {
             context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(PhoneSetupCopy.USB_TITLE, usbCommand))
@@ -232,6 +233,7 @@ fun PhoneSetupScreen(status: SystemStatus, repair: Boolean, onFix: (Fix) -> Unit
  * [scanning] 为真时连接一步说明正在本机找端口;连不上时 [onConnectPort] 收用户填的无线调试端口(已校验 1–65535)。
  * [usbCommand] 不为空时才有「改用电脑启动」:平时不出现,只在无线调试一步有一行「找不到无线调试?」([onAskUsb]);
  * [SetupView.usbFallback] 为真时,在当前这一步里给一张卡片,是一句说明、命令和复制按钮([onCopyUsbCommand])。
+ * [paired] 为假时助手是电脑起的,成功后的提示改说重启后要在电脑上再跑一次命令。
  */
 @Composable
 fun PhoneSetupContent(
@@ -255,6 +257,7 @@ fun PhoneSetupContent(
     usbCommand: String? = null,
     onAskUsb: () -> Unit = {},
     onCopyUsbCommand: () -> Unit = {},
+    paired: Boolean = true,
 ) {
     val canRevisit = view.phase == SetupPhase.Guide || view.phase == SetupPhase.Failed
     fun revisitable(step: SetupStep) = canRevisit && step != view.current && step in PhoneSetupFlow.REVISITABLE &&
@@ -300,7 +303,7 @@ fun PhoneSetupContent(
             Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
                 if (view.phase == SetupPhase.Success) {
                     Text(
-                        PhoneSetupCopy.SUCCESS_NOTE, Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                        PhoneSetupCopy.successNote(paired), Modifier.fillMaxWidth().padding(bottom = 10.dp),
                         style = MikaType.Caption, color = c.ink3, textAlign = TextAlign.Center,
                     )
                 }

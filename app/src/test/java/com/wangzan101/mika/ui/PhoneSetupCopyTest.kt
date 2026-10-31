@@ -27,6 +27,7 @@ class PhoneSetupCopyTest {
         BuiltinShellFailure.entries.forEach { val f = PhoneSetupCopy.failure(it); add(f.title); add(f.body) }
         BuiltinShellFix.entries.forEach { add(PhoneSetupCopy.fixLabel(it)) }
         statuses.forEach { add(PhoneSetupCopy.statusLine(it)); add(PhoneSetupCopy.statusLine(it, usbDebugging = false)); add(PhoneSetupCopy.statusValue(it).first) }
+        add(PhoneSetupCopy.successNote(paired = false))
         addAll(
             listOf(
                 PhoneSetupCopy.SUCCESS_LINE, PhoneSetupCopy.SUCCESS_NOTE, PhoneSetupCopy.USAGE_NOTE, PhoneSetupCopy.UNPAIR_BODY, PhoneSetupCopy.SKIP_NOTE, PhoneSetupCopy.DEGRADED_LINE, PhoneSetupCopy.PORT_FOUND,
@@ -191,6 +192,15 @@ class PhoneSetupCopyTest {
         assertEquals("找不到无线调试？", PhoneSetupCopy.USB_ASK)
         assertTrue(PhoneSetupCopy.USB_BODY.contains("数据线"))
         assertTrue(PhoneSetupCopy.USB_BODY.contains("重启后"))
+    }
+
+    /** 没配对过、助手是电脑起的:重启后 Mika 自己起不来,成功页不说打开无线调试就能自动重连,说在电脑上再跑一次。 */
+    @Test
+    fun successNoteForAHelperStartedFromAComputer() {
+        assertEquals(PhoneSetupCopy.SUCCESS_NOTE, PhoneSetupCopy.successNote(paired = true))
+        val usb = PhoneSetupCopy.successNote(paired = false)
+        assertTrue(usb, usb.contains("重启后要在电脑上再运行一次 USB 启动命令"))
+        assertFalse(usb, usb.contains("无线调试") || usb.contains("自动重连"))
     }
 
     @Test

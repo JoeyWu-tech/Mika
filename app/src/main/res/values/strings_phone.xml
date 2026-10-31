@@ -55,6 +55,7 @@
     <string name="phone_working">Pairing and connecting, just a few seconds</string>
     <string name="phone_success">Phone control is set up</string>
     <string name="phone_success_note">Keep USB debugging on. After a restart, turn on Wireless debugging and Mika reconnects automatically.</string>
+    <string name="phone_success_note_usb">Keep USB debugging on. After a restart, run the USB command on the computer again.</string>
     <string name="phone_start_using">Start using Mika</string>
     <string name="done">Done</string>
     <string name="fail_wrong_code">Wrong or expired pairing code</string>
