@@ -31,6 +31,14 @@ import com.wangzan101.mika.ui.theme.MikaIcons
 import com.wangzan101.mika.ui.components.TileTone
 import com.wangzan101.mika.ui.components.MikaSwitch
 import com.wangzan101.mika.ui.theme.MikaType
+import android.content.Intent
+import android.net.Uri
+import android.os.Environment
+import android.provider.Settings
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.wangzan101.mika.settings.FeatureFlags
+import com.wangzan101.mika.ui.components.RowValue
+import com.wangzan101.mika.ui.components.ValueTone
 
 /**
  * 设置 › 文件与计算环境 的文案(纯函数,便于测试)。运行环境对用户是看不见的实现细节(产品决定):
@@ -40,6 +48,11 @@ object SandboxCopy {
     val NETWORK_TITLE: String get() = tr(R.string.sandbox_network)
     val NETWORK_SUBTITLE: String get() = tr(R.string.sandbox_network_sub)
     val NETWORK_EXPLAIN: String get() = tr(R.string.sandbox_network_explain)
+    val STORAGE_TITLE: String get() = tr(R.string.sandbox_storage)
+    val STORAGE_GRANT: String get() = tr(R.string.sandbox_storage_grant)
+    val STORAGE_SUB_ON: String get() = tr(R.string.sandbox_storage_sub_on)
+    val STORAGE_SUB_OFF: String get() = tr(R.string.sandbox_storage_sub_off)
+    val STORAGE_GRANT_SUB: String get() = tr(R.string.sandbox_storage_grant_sub)
     val ISOLATION_UNAVAILABLE: String get() = tr(R.string.sandbox_isolation_unavailable)
     val RESET_TITLE: String get() = tr(R.string.sandbox_reset_title)
     val RESET_BODY: String get() = tr(R.string.sandbox_reset_body)
@@ -59,10 +72,27 @@ fun AdvancedSettings() {
     val state = remember { SandboxState.get(context) }
     val status by state.status.collectAsState()
     var network by remember { mutableStateOf(state.networkAllowed) }
+    val flags = remember { FeatureFlags.get(context) }
+    // 从系统设置回来时重读:刚授权就该变成开关
+    var storageGranted by remember { mutableStateOf(Environment.isExternalStorageManager()) }
+    var storageOn by remember { mutableStateOf(flags.containerStorage()) }
+    LifecycleResumeEffect(Unit) {
+        storageGranted = Environment.isExternalStorageManager()
+        onPauseOrDispose { }
+    }
     val scope = rememberCoroutineScope()
     AdvancedSection(
         status = status, networkAllowed = network, isolationIssue = state.isolationIssue != null,
         onNetworkChange = { state.networkAllowed = it; network = it },
+        storageGranted = storageGranted, storageOn = storageOn,
+        onStorageChange = { flags.setContainerStorage(it); storageOn = it },
+        onStorageGrant = {
+            runCatching {
+                context.startActivity(
+                    Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + context.packageName)),
+                )
+            }
+        },
         onReset = {
             scope.launch {
                 RootfsInstaller.create(context).reset()
@@ -80,6 +110,13 @@ fun AdvancedSection(
     isolationIssue: Boolean,
     onNetworkChange: (Boolean) -> Unit,
     onReset: () -> Unit,
+    /** 用户在系统设置里给过「所有文件访问权限」。 */
+    storageGranted: Boolean = false,
+    /** 设置里愿不愿意把手机存储挂进容器(给了权限才有意义)。 */
+    storageOn: Boolean = false,
+    onStorageChange: (Boolean) -> Unit = {},
+    /** 没给权限时点这一行:跳到系统的「所有文件访问权限」页,由用户自己开。 */
+    onStorageGrant: () -> Unit = {},
 ) {
     if (status is SandboxStatus.Unsupported) return
     var confirming by remember { mutableStateOf(false) }
@@ -90,6 +127,15 @@ fun AdvancedSection(
         }
         Note(SandboxCopy.NETWORK_EXPLAIN, if (networkAllowed) MikaTheme.colors.warn else MikaTheme.colors.ink3)
         if (isolationIssue) Note(SandboxCopy.ISOLATION_UNAVAILABLE, MikaTheme.colors.bad)
+        // 手机存储:权限要用户自己去系统设置给,Mika 不主动申请
+        ListRow(
+            MikaIcons.Phone, SandboxCopy.STORAGE_TITLE,
+            if (storageGranted) (if (storageOn) SandboxCopy.STORAGE_SUB_ON else SandboxCopy.STORAGE_SUB_OFF) else SandboxCopy.STORAGE_GRANT_SUB,
+            onClick = if (storageGranted) ({ onStorageChange(!storageOn) }) else onStorageGrant,
+        ) {
+            if (storageGranted) MikaSwitch(storageOn, onStorageChange, Modifier.testTag("sandbox-storage"))
+            else RowValue(SandboxCopy.STORAGE_GRANT, ValueTone.Link)
+        }
         ListRow(MikaIcons.Close, tr(R.string.sandbox_reset), SandboxCopy.resetSubtitle(status), titleColor = MikaTheme.colors.bad, tone = TileTone.Bad,
             onClick = if (status is SandboxStatus.Installing) null else ({ confirming = true }))
     }

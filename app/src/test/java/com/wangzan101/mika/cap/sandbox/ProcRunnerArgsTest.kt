@@ -14,6 +14,23 @@ class ProcRunnerArgsTest {
 
     private fun List<String>.hasPair(a: String, b: String) = indices.any { it + 1 < size && this[it] == a && this[it + 1] == b }
 
+    /** 手机存储:只有给了宿主路径才绑到 /sdcard(没授权、或设置里关着时就不给)。 */
+    @Test fun phoneStorageIsBoundOnlyWhenGiven() {
+        // 绑的是宿主路径:测试跑在 Windows 上时它的写法不同,按 File 给的路径拼
+        val storage = File("/storage/emulated/0")
+        val bind = storage.path + ":" + com.wangzan101.mika.core.workspace.SandboxPaths.SDCARD
+        val without = ProcRunner.argv(dirs, ws, "", 60, network = false, standIns = emptyList(), command = listOf("true"), devices = emptyList())
+        assertFalse(without.hasPair("-b", bind))
+        assertFalse(without.contains(com.wangzan101.mika.core.workspace.SandboxPaths.SDCARD))
+
+        val bound = ProcRunner.argv(
+            dirs, ws, "", 60, network = false, standIns = emptyList(), command = listOf("true"), sdcard = storage,
+            devices = emptyList(),
+        )
+        assertTrue(bound.hasPair("-b", bind))
+        assertEquals(listOf("true"), bound.takeLast(1))
+    }
+
     @Test fun argvOrderAndBinds() {
         val argv = ProcRunner.argv(dirs, ws, "sub/dir", 60, network = false, standIns = listOf("stat"),
             command = listOf("/bin/sh", "-lc", "echo hi"), devices = listOf("-b", "/dev/null"))

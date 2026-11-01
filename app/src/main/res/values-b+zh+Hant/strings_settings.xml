@@ -79,4 +79,9 @@
     <string name="routes_clear_title">清除全部已記住的操作路線?</string>
     <string name="routes_clear_body">清除後,做過的事下次會重新一步步來做,不影響別的設定。</string>
     <string name="clear">清除</string>
+    <string name="sandbox_storage">掛載手機儲存空間</string>
+    <string name="sandbox_storage_grant">去授權</string>
+    <string name="sandbox_storage_sub_on">已授權：容器裡的 /sdcard 就是手機儲存空間</string>
+    <string name="sandbox_storage_sub_off">已授權，但現在沒掛。打開後容器裡能看到你的檔案（/sdcard）</string>
+    <string name="sandbox_storage_grant_sub">需要「所有檔案存取權」，只能你自己到系統設定裡開。Mika 不會主動申請</string>
 </resources>

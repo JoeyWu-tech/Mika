@@ -7,6 +7,8 @@ import java.nio.file.Files
 object SandboxPaths {
     const val WORKSPACE = "/workspace"
     const val SKILLS = "/opt/mika/skills"
+    /** 用户允许、并且给了「所有文件访问权限」时才挂进来的手机存储;没挂时这个目录不存在。 */
+    const val SDCARD = "/sdcard"
 
     /** 相对路径以 [cwd] 为基;规范化后不在 [WORKSPACE] 或 [SKILLS] 下返回 null。 */
     fun normalize(path: String, cwd: String = WORKSPACE): String? {

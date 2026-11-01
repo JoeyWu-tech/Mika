@@ -23,6 +23,8 @@ object ProcRunner {
      */
     fun argv(
         dirs: SandboxDirs, workspace: File, cwd: String, timeoutSec: Int, network: Boolean, standIns: List<String>, command: List<String>,
+        /** 手机存储的宿主路径;不为空时绑到 /sdcard(用户自己在系统设置里给过权限才有,见 AndroidSandbox)。 */
+        sdcard: File? = null,
         devices: List<String> = ProotDevices.bindArgs(),
     ): List<String> = listOf(
         dirs.lib("libmikarun.so").path, "--timeout", timeoutSec.toString(), "--net", if (network) "on" else "off", "--",
@@ -33,7 +35,7 @@ object ProcRunner {
             "-b", "${workspace.path}:${SandboxPaths.WORKSPACE}",
             "-b", "${dirs.skills.path}:${SandboxPaths.SKILLS}",
             "-w", if (cwd.isEmpty()) SandboxPaths.WORKSPACE else "${SandboxPaths.WORKSPACE}/$cwd",
-        ) + command
+        ) + (sdcard?.let { listOf("-b", it.path + ":" + SandboxPaths.SDCARD) } ?: emptyList()) + command
 
     /** 环境先清空,只给这些;桥没开时不给 MIKA_BRIDGE / MIKA_TOKEN。 */
     fun env(dirs: SandboxDirs, bridgeName: String?, token: String?, conversationId: String): Map<String, String> = buildMap {

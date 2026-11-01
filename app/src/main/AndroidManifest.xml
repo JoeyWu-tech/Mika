@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 容器可以读写手机存储(设置 › 文件与计算环境里由用户自己到系统设置授权;不授权就不挂载) -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <!-- 按住说话时录音，转成文字。 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- 用户在关于页下载新版后，交给系统安装器确认覆盖安装。 -->

@@ -1,6 +1,7 @@
 package com.wangzan101.mika.cap.sandbox
 
 import android.content.Context
+import android.os.Environment
 import android.net.ConnectivityManager
 import android.util.Log
 import com.wangzan101.mika.chat.SharedFile
@@ -9,6 +10,7 @@ import com.wangzan101.mika.core.workspace.GatedFile
 import com.wangzan101.mika.core.workspace.WorkspaceFileGate
 import com.wangzan101.mika.core.workspace.SandboxError
 import com.wangzan101.mika.core.workspace.SandboxPaths
+import com.wangzan101.mika.settings.FeatureFlags
 import com.wangzan101.mika.core.cap.sandbox.SandboxPort
 import com.wangzan101.mika.core.cap.sandbox.PhoneCommandHandler
 import com.wangzan101.mika.core.cap.sandbox.SandboxStatus
@@ -107,6 +109,11 @@ class AndroidSandbox internal constructor(
     private val startPreparing: () -> Job? = { null },
     /** 用户的联网设置;不给时按就绪状态里的。 */
     private val allowNetwork: (() -> Boolean)? = null,
+    /**
+     * 手机存储的宿主路径;为 null 时不挂。要用户两件事都做了才有值:设置里打开「把手机存储挂进容器」,
+     * 并且自己在系统设置里给过「所有文件访问权限」(Mika 不主动申请)。
+     */
+    private val sdcard: () -> File? = { null },
     /** APK 内的桥客户端；已有运行环境也要随 APK 更新。 */
     private val clientScript: () -> ByteArray? = { null },
 ) : SandboxPort {
@@ -118,6 +125,12 @@ class AndroidSandbox internal constructor(
         skillFiles = { SkillsSync.bundled },
         startPreparing = { RuntimePreparer.ensure(context, retryFailed = true) },
         allowNetwork = { state.networkAllowed },
+        // 挂手机存储:设置里愿意挂 + 用户在系统设置里给过全文件权限,两个都满足才挂
+        sdcard = {
+            if (!FeatureFlags.get(context).containerStorage()) null
+            else if (!Environment.isExternalStorageManager()) null
+            else Environment.getExternalStorageDirectory()
+        },
         clientScript = { context.assets.open("sandbox/mika").use { it.readBytes() } },
     )
 
@@ -164,7 +177,7 @@ class AndroidSandbox internal constructor(
                     if (network) writeResolvConf()
                 }
             }
-            val cmd = ProcRunner.argv(dirs, ws, rel, timeoutSec, network, standIns(), argv)
+            val cmd = ProcRunner.argv(dirs, ws, rel, timeoutSec, network, standIns(), argv, sdcard = sdcard())
             // 命令结束(含超时、被杀、取消)就关掉桥:旧的名字和令牌不再能用
             val session = if (bridges) bridgeFor(workspace, network, onProgress, phone).open() else null
             try {

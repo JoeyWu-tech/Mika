@@ -86,4 +86,9 @@
     <string name="routes_clear_title">Clear all saved routes?</string>
     <string name="routes_clear_body">After clearing, Mika works things out step by step again next time. Other settings aren’t affected.</string>
     <string name="clear">Clear</string>
+    <string name="sandbox_storage">Mount phone storage</string>
+    <string name="sandbox_storage_grant">Grant access</string>
+    <string name="sandbox_storage_sub_on">Granted: /sdcard inside the container is your phone storage</string>
+    <string name="sandbox_storage_sub_off">Granted, but not mounted. Turn on to see your files as /sdcard in the container</string>
+    <string name="sandbox_storage_grant_sub">Needs “All files access”, which only you can grant in system settings. Mika never asks for it automatically</string>
 </resources>

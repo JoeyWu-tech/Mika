@@ -53,6 +53,16 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         prefs.edit().putBoolean(MUTE_TARGET, on).commit()
     }
 
+    /**
+     * 把手机存储挂进沙箱的 /sdcard。默认关;打开也只是「愿意挂」,还得用户在系统设置里给「所有文件访问权限」,
+     * 没给就不挂(见 [com.wangzan101.mika.cap.sandbox.AndroidSandbox])。
+     */
+    fun containerStorage(): Boolean = prefs.getBoolean(CONTAINER_STORAGE, false)
+
+    fun setContainerStorage(on: Boolean) {
+        prefs.edit().putBoolean(CONTAINER_STORAGE, on).commit()
+    }
+
     /** 在 App 里操作的节奏:快、标准(默认)、像人(见 [OperatingPace])。 */
     fun operatingPace(): OperatingPace = OperatingPace.parse(prefs.getString(OPERATING_PACE, null)) ?: OperatingPace.DEFAULT
 
@@ -112,6 +122,7 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         private const val PARALLEL_MAX = "parallel_max"
         private const val KEEP_SCREEN_ON = "keep_screen_on"
         private const val MUTE_TARGET = "mute_target"
+        private const val CONTAINER_STORAGE = "container_storage"
         private const val OPERATING_PACE = "operating_pace"
         private const val CAPSULE_MODE = "capsule_mode"
         private const val CAPSULE_SIDE = "capsule_side"
