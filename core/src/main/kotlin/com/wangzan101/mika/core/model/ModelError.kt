@@ -5,8 +5,13 @@ sealed class ModelError(message: String, cause: Throwable? = null) : Exception(m
     class QuotaExceeded : ModelError("额度已用完")
     class RateLimited(val retryAfterMs: Long?) : ModelError("请求太频繁,请稍后再试")
     class ContextTooLong : ModelError("对话内容超出模型上下文长度")
-    /** 服务商那里没有这个模型(或地址不对,请求的接口不存在);[model] 是请求的模型名,不知道时为空。 */
-    class ModelNotFound(val model: String = "") : ModelError(if (model.isEmpty()) "找不到该模型" else "找不到模型「$model」")
+    /**
+     * 服务商那里没有这个模型(或地址不对,请求的接口不存在);[model] 是请求的模型名,不知道时为空。
+     * [detail] 是服务端 JSON 报错里的原话(截短),没有为空:网关、中转服务还会用 404 说别的情况(比如它的上游模型这会儿都不可用),
+     * 看原话才分得出是哪一种。
+     */
+    class ModelNotFound(val model: String = "", val detail: String = "") :
+        ModelError(if (model.isEmpty()) "找不到该模型" else "找不到模型「$model」")
     /**
      * 服务商有这个模型,这个账号却用不了(没开通、没权限、没买);[detail] 是服务端的原话(截短),没有为空。
      * 换一个模型或到服务商后台开通才行,重试没用。见 [ModelAccessErrors]。

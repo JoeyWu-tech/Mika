@@ -162,6 +162,14 @@ class ResponsesModelTest {
         expect<ModelError.Auth> { model().complete("s", user, emptyList()) }
     }
 
+    /** 找不到模型时带上服务端的原话:按错误代码认出的、只看状态码 404 的都带。 */
+    @Test fun modelNotFoundCarriesTheServerMessage() = runTest {
+        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":{"code":"model_not_found","message":"The model `x` does not exist\n"}}"""))
+        assertEquals("The model `x` does not exist", expect<ModelError.ModelNotFound> { model().complete("s", user, emptyList()) }.detail)
+        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":{"message":"none of group/rpa's models is ready"}}"""))
+        assertEquals("none of group/rpa's models is ready", expect<ModelError.ModelNotFound> { model().complete("s", user, emptyList()) }.detail)
+    }
+
     @Test fun planHttpErrorsAreNotRetryable() = runTest {
         server.enqueue(MockResponse().setResponseCode(429).setBody("""{"detail":"usage limit"}"""))
         expect<ModelError.ChatGptLimitReached> { model(plan = true).complete("s", user, emptyList()) }

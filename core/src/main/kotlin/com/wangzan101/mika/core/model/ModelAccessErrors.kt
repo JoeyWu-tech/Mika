@@ -1,6 +1,7 @@
 package com.wangzan101.mika.core.model
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -13,8 +14,8 @@ import kotlinx.serialization.json.contentOrNull
  *   「Model.AccessDenied」「未开通」「无权限」…),或这个模型已经下线(「no longer available」「has been retired」
  *   「model … is deprecated」「已下线」…)→ [ModelError.ModelNotAvailable],带上服务端的原话;
  * - 没有这个模型(「model_not_found」「model not found」「model does not exist」「not found for API version」「模型不存在」…)
- *   → [ModelError.ModelNotFound]。
- * 404 没说前两类时由调用方照旧按找不到模型处理;认不出为 null,调用方按状态码处理。401 一律是 Key 的问题,不看。
+ *   → [ModelError.ModelNotFound],带上 JSON 里的原话([jsonDetail])。
+ * 404 没说前两类时由调用方照旧按找不到模型处理(同样带上 [jsonDetail]);认不出为 null,调用方按状态码处理。401 一律是 Key 的问题,不看。
  *
  * HTTP 429 一般是限流或额度用完,由调用方处理;只有内容说这个账号在这个模型上的额度是零(「limit: 0」
  * 「doesn't have a free quota tier」…,见 [QUOTA_ZERO])时算这个模型用不了,给 [ModelError.ModelNotAvailable]:等多久也不会好,换一个模型才行。
@@ -61,18 +62,28 @@ object ModelAccessErrors {
         return when {
             TOOLS_UNSUPPORTED.any { it in lower } -> ModelError.ToolsUnsupported(model)
             NOT_AVAILABLE.any { it in lower } || MODEL_RETIRED.containsMatchIn(lower) -> ModelError.ModelNotAvailable(model, detail(body))
-            status != 404 && NOT_FOUND.any { it in lower } -> ModelError.ModelNotFound(model)
+            status != 404 && NOT_FOUND.any { it in lower } -> ModelError.ModelNotFound(model, jsonDetail(body))
             else -> null
         }
     }
 
-    /** 服务端的原话:JSON 里 `error.message` / `message` / `msg`,不是 JSON 就是整段;截到 [DETAIL_MAX] 个字。 */
-    internal fun detail(body: String): String {
-        val root = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull()
+    /** 服务端的原话:JSON 里的([said]),不是 JSON 就是整段;太长的截短([clip])。 */
+    internal fun detail(body: String): String = clip(said(body) ?: body)
+
+    /** 同 [detail],但只要 JSON 里的原话:不是 JSON 的(地址不对时反向代理回的 HTML 页、空内容)为空。 */
+    internal fun jsonDetail(body: String): String = said(body)?.let(::clip).orEmpty()
+
+    /** 去掉首尾空白;超过 [DETAIL_MAX] 个字时截短,末尾加「…」,看得出后面还有。 */
+    internal fun clip(text: String): String =
+        text.trim().let { if (it.length <= DETAIL_MAX) it else it.take(DETAIL_MAX).trimEnd() + "…" }
+
+    /** JSON 对象(有的服务回数组,取第一个)里的 `error.message`、`error`(是字符串时)、`message`、`msg`、`detail`;都没有为 null。 */
+    private fun said(body: String): String? {
+        val parsed = runCatching { json.parseToJsonElement(body) }.getOrNull()
+        val root = parsed as? JsonObject ?: (parsed as? JsonArray)?.firstOrNull() as? JsonObject
         val err = root?.get("error")
-        val text = (err as? JsonObject)?.str("message") ?: (err as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
-            ?: root?.str("message") ?: root?.str("msg") ?: body
-        return text.trim().take(DETAIL_MAX)
+        return (err as? JsonObject)?.str("message") ?: (err as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+            ?: root?.str("message") ?: root?.str("msg") ?: root?.str("detail")
     }
 
     private fun JsonObject.str(k: String): String? = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull

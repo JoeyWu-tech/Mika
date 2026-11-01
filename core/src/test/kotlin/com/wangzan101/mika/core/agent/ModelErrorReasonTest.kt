@@ -17,6 +17,18 @@ class ModelErrorReasonTest {
         assertEquals("找不到模型「gemini」", ModelError.ModelNotFound("gemini").message)
     }
 
+    /** 404 也可能是网关、中转服务在说别的:有原话就带上,句末的点不重复;没有原话时和上面一样。 */
+    @Test fun modelNotFoundCarriesWhatTheServerSaid() {
+        assertEquals(
+            "模型「group/rpa」在这个服务商那里不存在。服务端说明:none of group/rpa's models is ready。去设置 › 模型,检查模型名(要填完整的模型 ID,比如 Gemini 的模型名类似 gemini-flash-latest)或改用对应的预设。",
+            StopRules.modelFailed(ModelError.ModelNotFound("group/rpa", "none of group/rpa's models is ready")).reason,
+        )
+        assertEquals(
+            "找不到该模型,请到设置 › 模型检查模型名和 Base URL 是否正确。服务端说明:The model `x` does not exist。",
+            StopRules.modelFailed(ModelError.ModelNotFound("", "The model `x` does not exist.")).reason,
+        )
+    }
+
     /** 这个账号用不了的模型、不支持工具的模型:说清是哪个、去哪换,或到服务商后台开通。 */
     @Test fun modelNotAvailableNamesTheModel() {
         assertEquals(
