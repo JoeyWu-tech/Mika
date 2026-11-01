@@ -18,6 +18,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Anthropic Messages API。
@@ -26,6 +27,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
  *   列表写明了模型接受哪几种思考方式([thinkingTypes])的,不接受的那种不发(什么都不发,按服务端默认)。
  *   思考块的 `signature` 连同收到它的地址存在 [Part.Thinking.opaque] 里([SignedThinking]),
  *   带工具调用的回合原样回传给同一个地址(不回传会被服务端拒绝),块的顺序照收到的不变。
+ *   签名还和产生它时的系统提示词、工具、前面的消息绑定;这些变了(展开一组工具、压缩历史等)以后,Claude 5.1 起的模型可能
+ *   拒绝回传的思考块([STALE_THINKING]),这时按文档的恢复办法去掉思考块再发一次(Mika 在这些模型上开思考只会是自适应思考,文档说
+ *   自适应思考不要求助手回合以思考块开头;这里把这次带的都去掉,见 [dropStaleThinking]),之后的请求也不再带它们
+ *   ([staleThinking])。
  * - 相邻同角色消息合并(Anthropic 要求 user/assistant 交替)。
  */
 class AnthropicModel(
@@ -57,9 +62,16 @@ class AnthropicModel(
     private val maxTokens = maxTokens ?: if (thinkingType == "adaptive") THINKING_MAX_TOKENS else DEFAULT_MAX_TOKENS
     private val json = Json { ignoreUnknownKeys = true }
     private val ephemeral = buildJsonObject { put("type", "ephemeral") }
+    /**
+     * 被拒的那次请求带的思考块([Part.Thinking.opaque]);历史里还留着,之后的请求都不带。
+     * 每个任务建一个模型,子任务和它共用,所以可能有几个协程同时用。
+     */
+    private val staleThinking: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     override suspend fun complete(system: String, messages: List<Message>, tools: List<ToolSpec>): ModelReply {
-        val (status, retryAfter, text) = HttpSupport.execute(http, request(system, messages, tools, stream = false))
+        val (status, retryAfter, text) = dropStaleThinking(messages) {
+            HttpSupport.execute(http, request(system, messages, tools, stream = false))
+        }
         if (status !in 200..299) throw mapError(status, retryAfter, text)
         return parse(text)
     }
@@ -68,12 +80,34 @@ class AnthropicModel(
         system: String, messages: List<Message>, tools: List<ToolSpec>, onText: (String) -> Unit,
     ): ModelReply {
         val stream = AnthropicStream(endpoint, onText, ::parseUsage)
-        val (status, retryAfter, text) = HttpSupport.stream(http, request(system, messages, tools, stream = true), stream::accept)
+        // 被拒的那次没有事件(不是 2xx 时 HttpSupport.stream 不调 accept),重发接着用这个 stream
+        val (status, retryAfter, text) = dropStaleThinking(messages) {
+            HttpSupport.stream(http, request(system, messages, tools, stream = true), stream::accept)
+        }
         if (status !in 200..299) throw mapError(status, retryAfter, text)
         if (text.isNotEmpty()) return parse(text).also { reply ->
             reply.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }.takeIf(String::isNotEmpty)?.let(onText)
         }
         return stream.finish()
+    }
+
+    /**
+     * 发一次;服务端说回传的思考块前缀对不上([STALE_THINKING])时,把这次带的思考块都记进 [staleThinking] 再发一次(只一次)。
+     * 文档给的做法是去掉报错点名的那块和它之后的;这里全去掉,不用按 `messages.N` 找位置,代价是更早的有效思考也不带了。
+     * 这次没带思考块的不重发,照常报错。
+     */
+    private suspend fun dropStaleThinking(messages: List<Message>, send: suspend () -> RawResponse): RawResponse {
+        val sent = messages.filter { it.role == Role.Assistant }.flatMap { it.parts }.filterIsInstance<Part.Thinking>()
+            .filter(::replays).mapNotNull { it.opaque }
+        val first = send()
+        if (first.status != 400 || STALE_THINKING !in first.body || !staleThinking.addAll(sent)) return first
+        return send()
+    }
+
+    /** 这一块回不回传:关掉思考时不带;别的地址收到的不带(签名只有发它的服务认);被拒的那次请求带过的不带([staleThinking])。 */
+    private fun replays(p: Part.Thinking): Boolean {
+        val opaque = p.opaque ?: return false
+        return thinkingType != "disabled" && opaque !in staleThinking && SignedThinking.block(p, endpoint) != null
     }
 
     private fun request(system: String, messages: List<Message>, tools: List<ToolSpec>, stream: Boolean): Request {
@@ -181,10 +215,10 @@ class AnthropicModel(
 
     // 开思考时,带工具调用的回合必须把上一条助手消息的思考块连同签名原样带回,块的顺序照收到的:
     // 新模型在工具调用前写的进度说明是单独的思考块,排在文字后面;挪到前面,服务端会当作前面的内容改过了。
-    // 明确关掉思考时不带,免得和当前请求的思考配置冲突。别的地址收到的不带(签名只有发它的服务认)。
+    // 明确关掉思考时不带,免得和当前请求的思考配置冲突;别的地址收到的、被拒的那次请求带过的也不带([replays])。
     private fun assistantBlocks(m: Message): List<JsonObject> = m.parts.mapNotNull { p ->
         when (p) {
-            is Part.Thinking -> if (thinkingType == "disabled") null else SignedThinking.block(p, endpoint)
+            is Part.Thinking -> if (replays(p)) SignedThinking.block(p, endpoint) else null
             is Part.Text -> if (p.text.isEmpty()) null else buildJsonObject { put("type", "text"); put("text", p.text) }
             is Part.ToolCall -> buildJsonObject {
                 put("type", "tool_use"); put("id", p.id); put("name", p.name)
@@ -335,6 +369,12 @@ private class AnthropicStream(
 /** 默认回复上限;开了思考时思考也占这个额度,4K 往往在出答案前就用完,给 [THINKING_MAX_TOKENS]。 */
 private const val DEFAULT_MAX_TOKENS = 4096
 private const val THINKING_MAX_TOKENS = 16_000
+
+/**
+ * 回传的思考块前缀对不上时报错里的一句(Anthropic 文档 Preserved thinking 一节的原文)。
+ * 只有前半句「Invalid `signature` in `thinking` block」、没有这一句的是签名本身坏了,不重发,照常报错。
+ */
+private const val STALE_THINKING = "bound to a different conversation"
 
 /**
  * 记在 [Part.Thinking.opaque] 里的 Anthropic 思考块:带签名的 thinking 是 `{"endpoint":…,"signature":…}`,

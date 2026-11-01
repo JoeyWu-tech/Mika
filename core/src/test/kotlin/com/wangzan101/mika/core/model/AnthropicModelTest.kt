@@ -162,6 +162,78 @@ class AnthropicModelTest {
         assertEquals(listOf("sig-1", "sig-2"), asst.filter { it.str("type") == "thinking" }.map { it.str("signature") })
     }
 
+    private fun staleThinking() = MockResponse().setResponseCode(400).setBody(
+        """{"type":"error","error":{"type":"invalid_request_error","message":"messages.1.content.0: Invalid `signature` in `thinking` block. The block is bound to a different conversation. Remove the block, or set `thinking.block_binding.prefix_mismatch_behavior` to \"drop_block\"."}}""",
+    )
+
+    // 展开一组工具、压缩历史以后,签名绑着之前请求前缀的思考块被拒:这次带的都去掉重发一次,之后也不再带;重发后收到的照常回传
+    @Test fun dropsRejectedThinkingAndSendsAgainOnce() = runTest {
+        val m = model(reasoningEffort = "high")
+        server.enqueue(staleThinking())
+        server.enqueue(ok("""{"content":[{"type":"thinking","thinking":"再想","signature":"sig-2"},{"type":"tool_use","id":"t2","name":"phone_tap","input":{}}],"stop_reason":"tool_use"}"""))
+        val reply = m.complete("s", signedHistory(endpoint), emptyList())
+        assertEquals(listOf("thinking", "redacted_thinking", "text", "tool_use"), sentAssistantBlocks().map { it.str("type") })
+        assertEquals(listOf("text", "tool_use"), sentAssistantBlocks().map { it.str("type") })
+        assertEquals(StopReason.ToolUse, reply.stopReason)
+
+        server.enqueue(ok("""{"content":[],"stop_reason":"end_turn"}"""))
+        val next = signedHistory(endpoint) + Message(Role.Assistant, reply.parts, Author.Mika) +
+            Message(Role.Tool, listOf(Part.ToolResult("t2", "done", false)), Author.Mika)
+        m.complete("s", next, emptyList())
+        val sent = sentBody().arr("messages").map { msg -> msg.jsonObject.arr("content").map { it.jsonObject } }
+        assertEquals(listOf("text", "tool_use"), sent[1].map { it.str("type") })
+        assertEquals(listOf("thinking", "tool_use"), sent[3].map { it.str("type") })
+        assertEquals("sig-2", sent[3][0].str("signature"))
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test fun streamingAlsoSendsAgainWithoutRejectedThinking() = runTest {
+        val sse = """
+            event: content_block_start
+            data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+            event: content_block_delta
+            data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"好"}}
+
+            event: content_block_stop
+            data: {"type":"content_block_stop","index":0}
+
+            event: message_delta
+            data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}
+
+            event: message_stop
+            data: {"type":"message_stop"}
+
+        """.trimIndent() + "\n\n"
+        server.enqueue(staleThinking())
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(sse))
+        val shown = mutableListOf<String>()
+        // 没选思考强度(服务端默认可能也在思考)时同样回传、同样去掉重发
+        val r = model().completeStreaming("s", signedHistory(endpoint), emptyList()) { shown += it }
+        assertEquals(listOf(Part.Text("好")), r.parts)
+        assertEquals(listOf("好"), shown)
+        assertEquals(listOf("thinking", "redacted_thinking", "text", "tool_use"), sentAssistantBlocks().map { it.str("type") })
+        assertEquals(listOf("text", "tool_use"), sentAssistantBlocks().map { it.str("type") })
+    }
+
+    // 别的 400 照常报错;签名本身坏了(只有前半句)不重发;这次没带思考块(关掉了思考)时不重发;去掉以后还被拒的不再发第三次
+    @Test fun otherRejectionsAreNotSentAgain() = runTest {
+        suspend fun rejected(m: AnthropicModel) =
+            try { m.complete("s", signedHistory(endpoint), emptyList()); null } catch (e: ModelError.BadResponse) { e }
+        server.enqueue(MockResponse().setResponseCode(400).setBody("""{"type":"error","error":{"type":"invalid_request_error","message":"tools.0.name: invalid"}}"""))
+        assertTrue(rejected(model(reasoningEffort = "high")) != null)
+        assertEquals(1, server.requestCount)
+        server.enqueue(MockResponse().setResponseCode(400).setBody("""{"type":"error","error":{"type":"invalid_request_error","message":"messages.1.content.0: Invalid `signature` in `thinking` block."}}"""))
+        assertTrue(rejected(model(reasoningEffort = "high")) != null)
+        assertEquals(2, server.requestCount)
+        server.enqueue(staleThinking())
+        assertTrue(rejected(model(reasoningEffort = "none")) != null)
+        assertEquals(3, server.requestCount)
+        repeat(2) { server.enqueue(staleThinking()) }
+        assertTrue(rejected(model(reasoningEffort = "high")) != null)
+        assertEquals(5, server.requestCount)
+    }
+
     @Test fun streamsThinkingSignatureForReplay() = runTest {
         val sse = """
             event: content_block_start
