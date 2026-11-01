@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -16,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -64,6 +66,14 @@ object SandboxCopy {
     val STORAGE_USAGE_TITLE: String get() = tr(R.string.sandbox_storage_usage)
     val STORAGE_USAGE_SUB: String get() = tr(R.string.sandbox_storage_usage_sub)
     fun proxySub(proxy: String): String = if (proxy.isBlank()) tr(R.string.sandbox_proxy_sub) else proxy
+    val STORAGE_PATHS_TITLE: String get() = tr(R.string.sandbox_storage_paths)
+    val STORAGE_PATHS_HINT: String get() = tr(R.string.sandbox_storage_paths_hint)
+    val STORAGE_PATHS_ALL: String get() = tr(R.string.sandbox_storage_paths_all)
+    val STORAGE_PATHS_CUSTOM_HINT: String get() = tr(R.string.sandbox_storage_paths_custom_hint)
+    val STORAGE_PATHS_ADD: String get() = tr(R.string.sandbox_storage_paths_add)
+    val STORAGE_PATHS_INVALID: String get() = tr(R.string.sandbox_storage_paths_invalid)
+    fun storagePathsSub(paths: Set<String>): String =
+        if (paths.isEmpty()) tr(R.string.sandbox_storage_paths_all) else paths.sorted().joinToString(tr(R.string.list_sep))
     val ISOLATION_UNAVAILABLE: String get() = tr(R.string.sandbox_isolation_unavailable)
     val RESET_TITLE: String get() = tr(R.string.sandbox_reset_title)
     val RESET_BODY: String get() = tr(R.string.sandbox_reset_body)
@@ -89,6 +99,8 @@ fun AdvancedSettings(onOpenStorage: () -> Unit = {}) {
     var storageOn by remember { mutableStateOf(flags.containerStorage()) }
     var proxy by remember { mutableStateOf(flags.containerProxy()) }
     var editingProxy by remember { mutableStateOf(false) }
+    var storagePaths by remember { mutableStateOf(flags.containerStoragePaths()) }
+    var choosingPaths by remember { mutableStateOf(false) }
     LifecycleResumeEffect(Unit) {
         storageGranted = Environment.isExternalStorageManager()
         onPauseOrDispose { }
@@ -107,6 +119,7 @@ fun AdvancedSettings(onOpenStorage: () -> Unit = {}) {
             }
         },
         proxy = proxy, onProxy = { editingProxy = true }, onOpenStorage = onOpenStorage,
+        storagePaths = storagePaths, onStoragePaths = { choosingPaths = true },
         onReset = {
             scope.launch {
                 RootfsInstaller.create(context).reset()
@@ -118,6 +131,11 @@ fun AdvancedSettings(onOpenStorage: () -> Unit = {}) {
         initial = proxy,
         onDismiss = { editingProxy = false },
         onSave = { flags.setContainerProxy(it); proxy = it.trim(); editingProxy = false },
+    )
+    if (choosingPaths) StoragePathsDialog(
+        initial = storagePaths,
+        onDismiss = { choosingPaths = false },
+        onSave = { flags.setContainerStoragePaths(it); storagePaths = it; choosingPaths = false },
     )
 }
 
@@ -161,6 +179,9 @@ fun AdvancedSection(
     proxy: String = "",
     onProxy: () -> Unit = {},
     onOpenStorage: () -> Unit = {},
+    /** 挂进容器的目录(相对共享存储);空集表示整个存储。 */
+    storagePaths: Set<String> = emptySet(),
+    onStoragePaths: () -> Unit = {},
 ) {
     if (status is SandboxStatus.Unsupported) return
     var confirming by remember { mutableStateOf(false) }
@@ -187,6 +208,10 @@ fun AdvancedSection(
             if (storageGranted) MikaSwitch(storageOn, onStorageChange, Modifier.testTag("sandbox-storage"))
             else RowValue(SandboxCopy.STORAGE_GRANT, ValueTone.Link)
         }
+        // 只挂哪几个目录:没选就是整个共享存储。没授权时这一行没有意义,不显示。
+        if (storageGranted) ListRow(MikaIcons.Doc, SandboxCopy.STORAGE_PATHS_TITLE, SandboxCopy.storagePathsSub(storagePaths), onClick = onStoragePaths) {
+            RowChevron()
+        }
         ListRow(MikaIcons.Close, tr(R.string.sandbox_reset), SandboxCopy.resetSubtitle(status), titleColor = MikaTheme.colors.bad, tone = TileTone.Bad,
             onClick = if (status is SandboxStatus.Installing) null else ({ confirming = true }))
     }
@@ -206,3 +231,56 @@ fun AdvancedSection(
 private fun Note(text: String, color: Color) {
     Text(text, Modifier.fillMaxWidth().padding(start = 60.dp, end = 16.dp, bottom = 10.dp), style = MikaType.Hint, color = color)
 }
+
+/** 挂哪几个目录:标准目录可勾,也能自己填一个(相对共享存储的路径,如 Projects/2026)。一个都不加就是整个存储。 */
+@Composable
+private fun StoragePathsDialog(initial: Set<String>, onDismiss: () -> Unit, onSave: (Set<String>) -> Unit) {
+    var picked by remember { mutableStateOf(initial) }
+    var custom by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf(false) }
+    fun add() {
+        val v = custom.trim().trimEnd('/')
+        // 只认相对共享存储的路径:不要开头的 /,也不要 .. 绕出去
+        if (v.isEmpty() || v.startsWith("/") || v.split('/').any { it == ".." }) {
+            problem = true
+            return
+        }
+        picked = picked + v
+        custom = ""
+        problem = false
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(SandboxCopy.STORAGE_PATHS_TITLE) },
+        text = {
+            Column {
+                Text(SandboxCopy.STORAGE_PATHS_HINT, style = MikaType.Caption, color = MikaTheme.colors.ink3)
+                androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(picked.isEmpty(), { picked = emptySet() }, Modifier.testTag("storage-path-whole"))
+                    Text(SandboxCopy.STORAGE_PATHS_ALL, Modifier.padding(start = 4.dp), style = MikaType.Body)
+                }
+                // 标准目录和自己填的排在一起;自己填的也能取消
+                (STORAGE_DIRS + picked.filter { it !in STORAGE_DIRS }.sorted()).forEach { dir ->
+                    androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(dir in picked, { on: Boolean -> picked = if (on) picked + dir else picked - dir }, Modifier.testTag("storage-path-$dir"))
+                        Text(dir, Modifier.padding(start = 4.dp), style = MikaType.Body)
+                    }
+                }
+                OutlinedTextField(
+                    custom, { custom = it; problem = false },
+                    Modifier.fillMaxWidth().padding(top = 8.dp).testTag("storage-path-custom"),
+                    singleLine = true, placeholder = { Text(SandboxCopy.STORAGE_PATHS_CUSTOM_HINT) },
+                    trailingIcon = { TextButton({ add() }) { Text(SandboxCopy.STORAGE_PATHS_ADD) } },
+                )
+                if (problem) {
+                    Text(SandboxCopy.STORAGE_PATHS_INVALID, Modifier.padding(top = 4.dp), style = MikaType.Hint, color = MikaTheme.colors.bad)
+                }
+            }
+        },
+        confirmButton = { TextButton({ onSave(picked) }) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** 共享存储里常见的几个目录;别的文件夹自己填。 */
+private val STORAGE_DIRS = listOf("Download", "Documents", "Pictures", "DCIM", "Music", "Movies")

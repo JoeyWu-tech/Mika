@@ -73,6 +73,17 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         prefs.edit().putString(CONTAINER_PROXY, proxy.trim()).commit()
     }
 
+    /**
+     * 挂进容器的手机存储目录(相对共享存储的路径,如 "Download")。空集表示整个存储。
+     * 只在用户给了「所有文件访问权限」、并且 [containerStorage] 打开时有意义。
+     */
+    fun containerStoragePaths(): Set<String> =
+        prefs.getStringSet(CONTAINER_STORAGE_PATHS, null).orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
+    fun setContainerStoragePaths(paths: Set<String>) {
+        prefs.edit().putStringSet(CONTAINER_STORAGE_PATHS, paths.map { it.trim() }.filter { it.isNotEmpty() }.toSet()).commit()
+    }
+
     /** 在 App 里操作的节奏:快、标准(默认)、像人(见 [OperatingPace])。 */
     fun operatingPace(): OperatingPace = OperatingPace.parse(prefs.getString(OPERATING_PACE, null)) ?: OperatingPace.DEFAULT
 
@@ -134,6 +145,7 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         private const val MUTE_TARGET = "mute_target"
         private const val CONTAINER_STORAGE = "container_storage"
         private const val CONTAINER_PROXY = "container_proxy"
+        private const val CONTAINER_STORAGE_PATHS = "container_storage_paths"
         private const val OPERATING_PACE = "operating_pace"
         private const val CAPSULE_MODE = "capsule_mode"
         private const val CAPSULE_SIDE = "capsule_side"

@@ -106,4 +106,10 @@
     <string name="container_usage_clear_all_title">清空所有工作區？</string>
     <string name="container_usage_clear_all_body">每個對話工作區裡的檔案都會被刪掉，對話本身和附件都還在。</string>
     <string name="container_usage_note">執行環境和技能隨 App 自帶，刪了也只是重新解包一次，騰不出多少地方。</string>
+    <string name="sandbox_storage_paths">掛載哪些資料夾</string>
+    <string name="sandbox_storage_paths_all">整個手機儲存空間</string>
+    <string name="sandbox_storage_paths_hint">勾選手機儲存空間裡的資料夾。一個都不勾就是掛整個儲存空間（/sdcard）。沒勾的目錄在容器裡看不到。</string>
+    <string name="sandbox_storage_paths_custom_hint">例如 Projects/2026</string>
+    <string name="sandbox_storage_paths_add">新增</string>
+    <string name="sandbox_storage_paths_invalid">請填手機儲存空間裡的路徑：不要以 / 開頭，也不要帶 ..</string>
 </resources>

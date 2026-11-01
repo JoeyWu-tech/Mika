@@ -113,4 +113,10 @@
     <string name="container_usage_clear_all_title">Clear every workspace?</string>
     <string name="container_usage_clear_all_body">Files in every conversation’s workspace will be deleted. Messages and attachments are kept.</string>
     <string name="container_usage_note">The runtime and skills come with the app; clearing them only makes Mika unpack them again.</string>
+    <string name="sandbox_storage_paths">Which folders to mount</string>
+    <string name="sandbox_storage_paths_all">Whole phone storage</string>
+    <string name="sandbox_storage_paths_hint">Pick folders under your phone storage. With none picked, the whole storage is mounted as /sdcard. Anything outside these folders is not visible in the container.</string>
+    <string name="sandbox_storage_paths_custom_hint">e.g. Projects/2026</string>
+    <string name="sandbox_storage_paths_add">Add</string>
+    <string name="sandbox_storage_paths_invalid">Enter a path inside your phone storage, without a leading / and without ..</string>
 </resources>

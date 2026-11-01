@@ -110,10 +110,11 @@ class AndroidSandbox internal constructor(
     /** 用户的联网设置;不给时按就绪状态里的。 */
     private val allowNetwork: (() -> Boolean)? = null,
     /**
-     * 手机存储的宿主路径;为 null 时不挂。要用户两件事都做了才有值:设置里打开「把手机存储挂进容器」,
+     * 手机存储要挂的目录:名字(相对共享存储,空串表示整个存储)→ 宿主路径。空列表表示不挂。
+     * 要用户两件事都做了才有值:设置里打开「把手机存储挂进容器」,
      * 并且自己在系统设置里给过「所有文件访问权限」(Mika 不主动申请)。
      */
-    private val sdcard: () -> File? = { null },
+    private val sdcard: () -> List<Pair<String, File>> = { emptyList() },
     /** 容器的网络代理(见 FeatureFlags.containerProxy);空串不用。 */
     private val proxy: () -> String = { "" },
     /** APK 内的桥客户端；已有运行环境也要随 APK 更新。 */
@@ -127,11 +128,14 @@ class AndroidSandbox internal constructor(
         skillFiles = { SkillsSync.bundled },
         startPreparing = { RuntimePreparer.ensure(context, retryFailed = true) },
         allowNetwork = { state.networkAllowed },
-        // 挂手机存储:设置里愿意挂 + 用户在系统设置里给过全文件权限,两个都满足才挂
+        // 挂手机存储:愿意挂 + 用户在系统设置里给过全文件权限,两个都满足才挂;
+        // 设置里点了具体目录就只挂那几个,没点就是整个共享存储
         sdcard = {
-            if (!FeatureFlags.get(context).containerStorage()) null
-            else if (!Environment.isExternalStorageManager()) null
-            else Environment.getExternalStorageDirectory()
+            val f = FeatureFlags.get(context)
+            val root = Environment.getExternalStorageDirectory()
+            if (!f.containerStorage() || !Environment.isExternalStorageManager()) emptyList()
+            else f.containerStoragePaths().map { it to File(root, it) }.filter { it.second.isDirectory }
+                .ifEmpty { listOf("" to root) }
         },
         proxy = { FeatureFlags.get(context).containerProxy() },
         clientScript = { context.assets.open("sandbox/mika").use { it.readBytes() } },
@@ -180,7 +184,11 @@ class AndroidSandbox internal constructor(
                     if (network) writeResolvConf()
                 }
             }
-            val cmd = ProcRunner.argv(dirs, ws, rel, timeoutSec, network, standIns(), argv, sdcard = sdcard())
+            // 挂载点得先在根文件系统里存在(PRoot 不一定给建),自己填的深路径也一样
+            val mounts = sdcard().also { list ->
+                list.forEach { (name, _) -> runCatching { File(dirs.rootfs, "sdcard/" + name).mkdirs() } }
+            }
+            val cmd = ProcRunner.argv(dirs, ws, rel, timeoutSec, network, standIns(), argv, sdcard = mounts)
             // 命令结束(含超时、被杀、取消)就关掉桥:旧的名字和令牌不再能用
             val session = if (bridges) bridgeFor(workspace, network, onProgress, phone).open() else null
             try {

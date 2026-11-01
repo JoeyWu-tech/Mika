@@ -24,11 +24,22 @@ class ProcRunnerArgsTest {
         assertFalse(without.contains(com.wangzan101.mika.core.workspace.SandboxPaths.SDCARD))
 
         val bound = ProcRunner.argv(
-            dirs, ws, "", 60, network = false, standIns = emptyList(), command = listOf("true"), sdcard = storage,
+            dirs, ws, "", 60, network = false, standIns = emptyList(), command = listOf("true"), sdcard = listOf("" to storage),
             devices = emptyList(),
         )
         assertTrue(bound.hasPair("-b", bind))
         assertEquals(listOf("true"), bound.takeLast(1))
+    }
+
+    /** 只挂指定目录时,绑的是 /sdcard 底下的那个文件夹,不是整个 /sdcard。 */
+    @Test fun phoneStorageBindsNamedFoldersUnderSdcard() {
+        val dir = File("/storage/emulated/0/Download")
+        val argv = ProcRunner.argv(
+            dirs, ws, "", 60, network = false, standIns = emptyList(), command = listOf("true"),
+            sdcard = listOf("Download" to dir), devices = emptyList(),
+        )
+        assertTrue(argv.hasPair("-b", dir.path + ":" + com.wangzan101.mika.core.workspace.SandboxPaths.SDCARD + "/Download"))
+        assertFalse(argv.hasPair("-b", dir.path + ":" + com.wangzan101.mika.core.workspace.SandboxPaths.SDCARD))
     }
 
     @Test fun argvOrderAndBinds() {
