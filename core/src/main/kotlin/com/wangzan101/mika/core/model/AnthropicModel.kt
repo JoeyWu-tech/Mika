@@ -25,7 +25,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
  * - 选了思考强度时开自适应思考(`thinking.type = adaptive`)并把档位放进 `output_config.effort`;选 `none` 时关掉。
  *   列表写明了模型接受哪几种思考方式([thinkingTypes])的,不接受的那种不发(什么都不发,按服务端默认)。
  *   思考块的 `signature` 连同收到它的地址存在 [Part.Thinking.opaque] 里([SignedThinking]),
- *   带工具调用的回合原样回传给同一个地址(不回传会被服务端拒绝)。
+ *   带工具调用的回合原样回传给同一个地址(不回传会被服务端拒绝),块的顺序照收到的不变。
  * - 相邻同角色消息合并(Anthropic 要求 user/assistant 交替)。
  */
 class AnthropicModel(
@@ -179,22 +179,19 @@ class AnthropicModel(
         return results + rest
     }
 
-    private fun assistantBlocks(m: Message): List<JsonObject> {
-        // 开思考时,带工具调用的回合必须把上一条助手消息的思考块连同签名原样带回。
-        // 明确关掉思考时不带,免得和当前请求的思考配置冲突。别的地址收到的不带(签名只有发它的服务认)。
-        val thinking = if (thinkingType == "disabled") emptyList()
-            else m.parts.filterIsInstance<Part.Thinking>().mapNotNull { SignedThinking.block(it, endpoint) }
-        val blocks = m.parts.mapNotNull { p ->
-            when (p) {
-                is Part.Text -> if (p.text.isEmpty()) null else buildJsonObject { put("type", "text"); put("text", p.text) }
-                is Part.ToolCall -> buildJsonObject {
-                    put("type", "tool_use"); put("id", p.id); put("name", p.name)
-                    put("input", try { json.parseToJsonElement(p.argsJson).jsonObject } catch (e: Exception) { JsonObject(emptyMap()) })
-                }
-                else -> null
+    // 开思考时,带工具调用的回合必须把上一条助手消息的思考块连同签名原样带回,块的顺序照收到的:
+    // 新模型在工具调用前写的进度说明是单独的思考块,排在文字后面;挪到前面,服务端会当作前面的内容改过了。
+    // 明确关掉思考时不带,免得和当前请求的思考配置冲突。别的地址收到的不带(签名只有发它的服务认)。
+    private fun assistantBlocks(m: Message): List<JsonObject> = m.parts.mapNotNull { p ->
+        when (p) {
+            is Part.Thinking -> if (thinkingType == "disabled") null else SignedThinking.block(p, endpoint)
+            is Part.Text -> if (p.text.isEmpty()) null else buildJsonObject { put("type", "text"); put("text", p.text) }
+            is Part.ToolCall -> buildJsonObject {
+                put("type", "tool_use"); put("id", p.id); put("name", p.name)
+                put("input", try { json.parseToJsonElement(p.argsJson).jsonObject } catch (e: Exception) { JsonObject(emptyMap()) })
             }
+            else -> null
         }
-        return thinking + blocks
     }
 
     private fun parse(text: String): ModelReply {

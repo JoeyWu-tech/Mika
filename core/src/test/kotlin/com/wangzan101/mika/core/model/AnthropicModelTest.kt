@@ -145,6 +145,23 @@ class AnthropicModelTest {
         assertEquals(listOf("text", "tool_use"), sentAssistantBlocks().map { it.str("type") })
     }
 
+    // 工具调用前的进度说明是单独的思考块,排在文字后面:回传时照收到的顺序,不挪到最前面
+    @Test fun replaysBlocksInTheOrderReceived() = runTest {
+        server.enqueue(ok("""{"content":[],"stop_reason":"end_turn"}"""))
+        val history = listOf(
+            Message(Role.User, listOf(Part.Text("go")), Author.Mika),
+            Message(Role.Assistant, listOf(
+                Part.Thinking("想", SignedThinking.signed(endpoint, "sig-1")), Part.Text("先打开设置"),
+                Part.Thinking("", SignedThinking.signed(endpoint, "sig-2")), Part.ToolCall("t1", "phone_launch_app", "{}"),
+            ), Author.Mika),
+            Message(Role.Tool, listOf(Part.ToolResult("t1", "done", false)), Author.Mika),
+        )
+        model().complete("s", history, emptyList())
+        val asst = sentAssistantBlocks()
+        assertEquals(listOf("thinking", "text", "thinking", "tool_use"), asst.map { it.str("type") })
+        assertEquals(listOf("sig-1", "sig-2"), asst.filter { it.str("type") == "thinking" }.map { it.str("signature") })
+    }
+
     @Test fun streamsThinkingSignatureForReplay() = runTest {
         val sse = """
             event: content_block_start
