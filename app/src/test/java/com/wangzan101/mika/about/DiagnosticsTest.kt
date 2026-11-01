@@ -46,6 +46,7 @@ class DiagnosticsTest {
         wirelessSetting: Boolean? = true,
         installer: String? = "com.android.packageinstaller",
         connect: ConnectCandidates? = ConnectCandidates(property = 0, mdns = 2, cache = 1, connected = false),
+        adbKey: String? = "Loaded",
     ) = DiagnosticsSnapshot(
         generatedAtMs = now,
         app = DiagnosticsSnapshot.App("0.1.7", "cfa4380", installer, "System (zh-Hans)"),
@@ -55,6 +56,7 @@ class DiagnosticsTest {
             accessibility = status.accessibility, wirelessDebuggingSetting = wirelessSetting,
             connect = connect,
             pairingChannels = mapOf("pairing_alert" to 4), attentionChannelImportance = 2, wifiConnected = true, lastError = lastError,
+            adbKey = adbKey,
         ),
         recovery = DiagnosticsSnapshot.Recovery(
             RecoveryConsent(applied = setOf(RecoveryCapability.BatteryWhitelist), declined = setOf(RecoveryCapability.RestoreAfterReboot)),
@@ -123,6 +125,18 @@ class DiagnosticsTest {
         assertTrue(t, t.contains("confirmed by user: none"))
         assertTrue(t, t.contains("last error: none"))
         assertTrue(t, t.contains("installer: unknown"))
+    }
+
+    /** 钥匙的状况和读不出的原因照原样写出来,不被遮成「名=值」里的凭据。 */
+    @Test
+    fun adbKeyStateIsNotMasked() {
+        val loaded = Diagnostics.render(snapshot())
+        assertTrue(loaded, loaded.contains("adb identity: Loaded"))
+        val problem = "stored key is not valid PKCS#8"
+        val t = Diagnostics.render(snapshot(adbKey = "Unreadable ($problem)"))
+        assertTrue(t, t.contains("adb identity: Unreadable ($problem)"))
+        val unknown = Diagnostics.render(snapshot(adbKey = null))
+        assertTrue(unknown, unknown.contains("adb identity: unknown"))
     }
 
     /** 配对通知频道被关掉:报的是引导页同一份状态,停在配对一步时还写出通知的问题。 */

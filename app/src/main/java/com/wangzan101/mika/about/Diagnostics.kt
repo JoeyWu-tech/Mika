@@ -212,7 +212,8 @@ object Diagnostics {
         line("attention channel", importance(p.attentionChannelImportance))
         line("Wi-Fi", when (p.wifiConnected) { true -> "connected"; false -> "not connected"; null -> "unknown" })
         line("last error", p.lastError?.takeIf { it.isNotBlank() }?.take(MAX_ERROR) ?: "none")
-        line("adb key", p.adbKey ?: "unknown")
+        // 行名最后一个词不能是 key、token 一类:sanitize 的 SECRET_PAIR 会把冒号后的第一个词当凭据遮掉
+        line("adb identity", p.adbKey ?: "unknown")
         line("app copies", p.appCopies ?: "unknown")
         p.appsAfterTask?.let { line("apps after task", it) }
     }
