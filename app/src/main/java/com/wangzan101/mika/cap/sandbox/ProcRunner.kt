@@ -38,7 +38,11 @@ object ProcRunner {
         ) + (sdcard?.let { listOf("-b", it.path + ":" + SandboxPaths.SDCARD) } ?: emptyList()) + command
 
     /** 环境先清空,只给这些;桥没开时不给 MIKA_BRIDGE / MIKA_TOKEN。 */
-    fun env(dirs: SandboxDirs, bridgeName: String?, token: String?, conversationId: String): Map<String, String> = buildMap {
+    fun env(
+        dirs: SandboxDirs, bridgeName: String?, token: String?, conversationId: String,
+        /** 容器的网络代理;空串表示不用(见 FeatureFlags.containerProxy)。 */
+        proxy: String = "",
+    ): Map<String, String> = buildMap {
         put("PROOT_LOADER", dirs.lib("libproot_loader.so").path)
         put("PROOT_TMP_DIR", dirs.tmp.path)
         put("HOME", "/root")
@@ -50,6 +54,10 @@ object ProcRunner {
         bridgeName?.let { put("MIKA_BRIDGE", it) }
         token?.let { put("MIKA_TOKEN", it) }
         put("MIKA_CONVERSATION", conversationId)
+        // 代理只给容器里的命令用:常见工具认这三个变量
+        if (proxy.isNotBlank()) {
+            put("http_proxy", proxy); put("https_proxy", proxy); put("all_proxy", proxy)
+        }
     }
 
     /**

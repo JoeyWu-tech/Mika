@@ -91,4 +91,26 @@
     <string name="sandbox_storage_sub_on">Granted: /sdcard inside the container is your phone storage</string>
     <string name="sandbox_storage_sub_off">Granted, but not mounted. Turn on to see your files as /sdcard in the container</string>
     <string name="sandbox_storage_grant_sub">Needs “All files access”, which only you can grant in system settings. Mika never asks for it automatically</string>
+    <string name="sandbox_proxy">Network proxy</string>
+    <string name="sandbox_proxy_sub">Not set: commands connect directly</string>
+    <string name="sandbox_proxy_hint">Used by commands inside the container (http_proxy, https_proxy, all_proxy). Mika itself is not affected. Leave empty to connect directly.</string>
+    <string name="sandbox_proxy_none">Not set</string>
+    <string name="sandbox_proxy_set">Set</string>
+    <string name="sandbox_storage_usage">Storage used</string>
+    <string name="sandbox_storage_usage_sub">How much the container takes, and clearing a conversation’s workspace</string>
+    <string name="container_usage_title">Storage used</string>
+    <string name="container_usage_empty">The container hasn’t stored anything yet.</string>
+    <string name="container_usage_no_workspace">No conversation has a workspace yet.</string>
+    <string name="container_usage_workspaces">Workspaces</string>
+    <string name="container_usage_total">Total</string>
+    <string name="container_usage_runtime">Runtime</string>
+    <string name="container_usage_skills">Skills</string>
+    <string name="container_usage_slices_workspaces">Workspaces</string>
+    <string name="container_usage_delete">Clear</string>
+    <string name="container_usage_delete_title">Clear this workspace?</string>
+    <string name="container_usage_delete_body">Files this conversation put in its workspace will be deleted. Messages and attachments are kept.</string>
+    <string name="container_usage_clear_all">Clear all workspaces</string>
+    <string name="container_usage_clear_all_title">Clear every workspace?</string>
+    <string name="container_usage_clear_all_body">Files in every conversation’s workspace will be deleted. Messages and attachments are kept.</string>
+    <string name="container_usage_note">The runtime and skills come with the app; clearing them only makes Mika unpack them again.</string>
 </resources>

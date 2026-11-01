@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** 设置里能进入的子页面;[Home] 是设置首页。 */
-private enum class SettingsPage { Home, Usage, PhoneOps, DuringWork, Capsule, Language, Notifications, WebSites, Sandbox, Routes, Recovery, SelfCheck, ComputerAccess, Developer, RunStats }
+private enum class SettingsPage { Home, Usage, PhoneOps, DuringWork, Capsule, Language, Notifications, WebSites, Sandbox, Routes, Recovery, SelfCheck, ComputerAccess, Developer, RunStats, Storage }
 
 /**
  * 设置页:总状态卡 + 基本 / 隐私与数据 / 高级 / 关于四组。各子页面在这里切换(返回键先回首页),
@@ -142,6 +142,7 @@ fun SettingsScreen(
     val back = {
         page = when (page) {
             SettingsPage.RunStats -> SettingsPage.Developer
+            SettingsPage.Storage -> SettingsPage.Sandbox
             SettingsPage.SelfCheck -> SettingsPage.Recovery
             SettingsPage.Notifications -> notificationsFrom
             else -> SettingsPage.Home
@@ -187,7 +188,7 @@ fun SettingsScreen(
         SettingsPage.Capsule -> CapsuleScreen(capsuleMode, onMode = { flags.setCapsuleMode(it); capsuleMode = it }, onBack = toHome)
         // 没有数据时首页不显示入口,走不到这一页
         SettingsPage.WebSites -> webSites?.let { WebSitesScreen(it, onBack = toHome) }
-        SettingsPage.Sandbox -> SandboxScreen(onBack = toHome)
+        SettingsPage.Sandbox -> SandboxScreen(onBack = toHome, onOpenStorage = { page = SettingsPage.Storage })
         SettingsPage.Routes -> RoutesScreen(
             routeCount,
             onClear = { scope.launch { routeCount = withContext(Dispatchers.IO) { routeStore.clear(); routeStore.count() } } },
@@ -204,6 +205,7 @@ fun SettingsScreen(
             onOpenRunStats = { page = SettingsPage.RunStats },
         )
         SettingsPage.RunStats -> RunStatsScreen(remember { RunStore(context).metrics }, onBack = back)
+        SettingsPage.Storage -> ContainerUsageScreen(context, onBack = back)
     }
 
     explaining?.let { p ->

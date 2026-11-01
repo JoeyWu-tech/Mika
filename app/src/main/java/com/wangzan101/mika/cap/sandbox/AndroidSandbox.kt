@@ -114,6 +114,8 @@ class AndroidSandbox internal constructor(
      * 并且自己在系统设置里给过「所有文件访问权限」(Mika 不主动申请)。
      */
     private val sdcard: () -> File? = { null },
+    /** 容器的网络代理(见 FeatureFlags.containerProxy);空串不用。 */
+    private val proxy: () -> String = { "" },
     /** APK 内的桥客户端；已有运行环境也要随 APK 更新。 */
     private val clientScript: () -> ByteArray? = { null },
 ) : SandboxPort {
@@ -131,6 +133,7 @@ class AndroidSandbox internal constructor(
             else if (!Environment.isExternalStorageManager()) null
             else Environment.getExternalStorageDirectory()
         },
+        proxy = { FeatureFlags.get(context).containerProxy() },
         clientScript = { context.assets.open("sandbox/mika").use { it.readBytes() } },
     )
 
@@ -181,7 +184,7 @@ class AndroidSandbox internal constructor(
             // 命令结束(含超时、被杀、取消)就关掉桥:旧的名字和令牌不再能用
             val session = if (bridges) bridgeFor(workspace, network, onProgress, phone).open() else null
             try {
-                launch(cmd, ProcRunner.env(dirs, session?.name, session?.token, workspace), timeoutSec * 1000L + FALLBACK_GRACE_MS)
+                launch(cmd, ProcRunner.env(dirs, session?.name, session?.token, workspace, proxy()), timeoutSec * 1000L + FALLBACK_GRACE_MS)
             } finally {
                 session?.close()
             }

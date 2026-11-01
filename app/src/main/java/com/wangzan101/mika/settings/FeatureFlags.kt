@@ -63,6 +63,16 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         prefs.edit().putBoolean(CONTAINER_STORAGE, on).commit()
     }
 
+    /**
+     * 容器的网络代理,形如 `http://user:pass@host:port`;空串表示不用。
+     * 只影响沙箱里的命令(`http_proxy` / `https_proxy` / `all_proxy`),不影响 Mika 自己去调模型。
+     */
+    fun containerProxy(): String = prefs.getString(CONTAINER_PROXY, null).orEmpty()
+
+    fun setContainerProxy(proxy: String) {
+        prefs.edit().putString(CONTAINER_PROXY, proxy.trim()).commit()
+    }
+
     /** 在 App 里操作的节奏:快、标准(默认)、像人(见 [OperatingPace])。 */
     fun operatingPace(): OperatingPace = OperatingPace.parse(prefs.getString(OPERATING_PACE, null)) ?: OperatingPace.DEFAULT
 
@@ -123,6 +133,7 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         private const val KEEP_SCREEN_ON = "keep_screen_on"
         private const val MUTE_TARGET = "mute_target"
         private const val CONTAINER_STORAGE = "container_storage"
+        private const val CONTAINER_PROXY = "container_proxy"
         private const val OPERATING_PACE = "operating_pace"
         private const val CAPSULE_MODE = "capsule_mode"
         private const val CAPSULE_SIDE = "capsule_side"

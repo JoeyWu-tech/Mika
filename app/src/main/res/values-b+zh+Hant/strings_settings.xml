@@ -84,4 +84,26 @@
     <string name="sandbox_storage_sub_on">已授權：容器裡的 /sdcard 就是手機儲存空間</string>
     <string name="sandbox_storage_sub_off">已授權，但現在沒掛。打開後容器裡能看到你的檔案（/sdcard）</string>
     <string name="sandbox_storage_grant_sub">需要「所有檔案存取權」，只能你自己到系統設定裡開。Mika 不會主動申請</string>
+    <string name="sandbox_proxy">網路代理</string>
+    <string name="sandbox_proxy_sub">沒設定：指令直接連</string>
+    <string name="sandbox_proxy_hint">只給容器裡的指令用（http_proxy、https_proxy、all_proxy），不影響 Mika 自己呼叫模型。留空表示不用代理。</string>
+    <string name="sandbox_proxy_none">沒設定</string>
+    <string name="sandbox_proxy_set">已設定</string>
+    <string name="sandbox_storage_usage">已用空間</string>
+    <string name="sandbox_storage_usage_sub">容器佔了多少，以及清理某個對話的工作區</string>
+    <string name="container_usage_title">已用空間</string>
+    <string name="container_usage_empty">容器裡還沒有存東西。</string>
+    <string name="container_usage_no_workspace">還沒有對話建過工作區。</string>
+    <string name="container_usage_workspaces">工作區</string>
+    <string name="container_usage_total">合計</string>
+    <string name="container_usage_runtime">執行環境</string>
+    <string name="container_usage_skills">技能</string>
+    <string name="container_usage_slices_workspaces">工作區</string>
+    <string name="container_usage_delete">清理</string>
+    <string name="container_usage_delete_title">清理這個工作區？</string>
+    <string name="container_usage_delete_body">這段對話放在工作區裡的檔案會被刪掉，對話本身和附件都還在。</string>
+    <string name="container_usage_clear_all">清空所有工作區</string>
+    <string name="container_usage_clear_all_title">清空所有工作區？</string>
+    <string name="container_usage_clear_all_body">每個對話工作區裡的檔案都會被刪掉，對話本身和附件都還在。</string>
+    <string name="container_usage_note">執行環境和技能隨 App 自帶，刪了也只是重新解包一次，騰不出多少地方。</string>
 </resources>
