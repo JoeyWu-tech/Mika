@@ -92,7 +92,7 @@ class MemoryTriggerStore(initial: TriggerSnapshot = TriggerSnapshot(emptyList(),
             it.state == TriggerWindowState.Dispatched || it.state == TriggerWindowState.ActionDispatched }
             .map { it.triggerId }.toSet()
         val due = triggers.values.filter { it.enabled && it.id !in active && it.nextAtMs <= nowMs &&
-            ledger["${it.id}:${it.nextAtMs}"] == null && eligible(it) }
+            ledger["${it.id}:${it.nextAtMs}"] == null && eligible(it) } // 和 TriggerDefinition.slotTaken 一致
         return due.map { t ->
             val interval = t.intervalMs
             val missed = if (interval == null) 0 else (nowMs - t.nextAtMs) / interval
@@ -140,6 +140,13 @@ class MemoryTriggerStore(initial: TriggerSnapshot = TriggerSnapshot(emptyList(),
     }
 }
 
+/**
+ * 这个计划眼下这一次的时段已经记过账(认领过,跑过或正在跑):[TriggerStore.claimDue] 不会再认领它,两边的条件要一致。
+ * 一次性计划认领后下次时间不往前走,就是这样;循环的计划认领时就换到下一个时段了。
+ */
+fun TriggerDefinition.slotTaken(windows: List<TriggerWindow>): Boolean =
+    windows.any { it.triggerId == id && it.dueAtMs == nextAtMs }
+
 /** 以当地日历递进，跨夏令时仍保持同一钟点；不存在的钟点使用系统的向前调整规则。 */
 fun nextCalendarAt(time: String, zone: String, days: List<Int>, afterMs: Long): Long {
     val localTime = LocalTime.parse(time)
@@ -161,13 +168,27 @@ class TriggerEngine(private val store: TriggerStore, private val scheduleAlarm: 
         store.windows().filter { it.state == TriggerWindowState.Claimed }
             .forEach { store.mark(it.key, TriggerWindowState.Unknown, "process restarted before dispatch confirmation") }
         val idle = isIdle()
-        val active = store.windows().filter { it.state == TriggerWindowState.Claimed ||
+        val windows = store.windows()
+        val active = windows.filter { it.state == TriggerWindowState.Claimed ||
             it.state == TriggerWindowState.Dispatched || it.state == TriggerWindowState.ActionDispatched }
             .map { it.triggerId }.toSet()
-        scheduleAlarm(store.all().filter { it.enabled }.minOfOrNull {
+        // 时段已记过账的计划 claimDue 不会认领,不为它排闹钟:按到期时间排就是「马上响」,响了又认领不了,一直空转
+        scheduleAlarm(store.all().filter { it.enabled && (it.id in active || !it.slotTaken(windows)) }.minOfOrNull {
             if (it.id in active) nowMs + idleRetryMs
             else maxOf(if (it.idleOnly && !idle) nowMs + idleRetryMs else nowMs, it.nextAtMs)
         })
+    }
+
+    /**
+     * 暂停或恢复 [id];没有这个计划、或要恢复的计划这一次的时段已经记过账([slotTaken],认领过的一次性计划)时不改,返回 false:
+     * 恢复了也不会再跑,要再跑用改时间或立即执行(计划页对这种计划也不给开关)。
+     */
+    fun setEnabled(id: String, enabled: Boolean, nowMs: Long): Boolean {
+        val trigger = store.get(id) ?: return false
+        if (enabled && trigger.slotTaken(store.windows())) return false
+        store.upsert(trigger.copy(enabled = enabled))
+        rearm(nowMs)
+        return true
     }
 
     /** 时区变化后,跟随设备旧时区的当地时间计划重算到新时区;显式钉了其他时区的计划不动。 */

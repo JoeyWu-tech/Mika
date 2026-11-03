@@ -135,11 +135,9 @@ object TriggerRuntime {
         TriggerSnapshot(it.all(), it.windows())
     }
 
-    @Synchronized fun setEnabled(context: Context, id: String, enabled: Boolean) {
-        val store = store(context)
-        store.get(id)?.let { store.upsert(it.copy(enabled = enabled)) }
-        engine(context, store).rearm(System.currentTimeMillis())
-    }
+    /** 暂停或恢复;改不了(没有这个计划、恢复跑过的一次性计划)时返回 false,见 [TriggerEngine.setEnabled]。 */
+    @Synchronized fun setEnabled(context: Context, id: String, enabled: Boolean): Boolean =
+        store(context).let { engine(context, it).setEnabled(id, enabled, System.currentTimeMillis()) }
 
     @Synchronized fun remove(context: Context, id: String) {
         val store = store(context)
