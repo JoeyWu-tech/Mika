@@ -128,10 +128,10 @@ class McpClientTest {
     @Test fun oneToolAssemblyFailureBecomesDiagnosableToolError() = runBlocking {
         val endpoint = FakeEndpoint()
         val descriptor = endpoint.offered.single()
-        val assembled = assembleMcpTool("mcp:demo", endpoint, descriptor) {
+        val assembled = assembleMcpTool("mcp:demo", endpoint, descriptor, "mcp_demo__search") {
             throw IllegalStateException("schema adapter exploded")
         }
-        assertEquals("mcp_demo__search", assembled.tool.name)
+        assertEquals("mcp_demo__search", assembled.tool.name) // 名字照传进来的用
         assertTrue(assembled.failure.orEmpty(), "schema adapter exploded" in assembled.failure.orEmpty())
         val result = assembled.tool.execute(
             Args(assembled.tool.def, buildJsonObject {}),
@@ -242,5 +242,81 @@ class McpClientTest {
             .judge("mcp_demo__send", buildJsonObject {}, Origin.Model(1))
         assertEquals(Decision.Clear, decision)
         assertEquals(0, endpoint.calls)
+    }
+
+    /** 只列工具、记下被调用的原名的服务;工具说明就写原名,好从定义里认出是哪一个。 */
+    private class NamedEndpoint(override val serverId: String, private val names: List<String>) : McpEndpoint {
+        val called = mutableListOf<String>()
+        override fun tools() = names.map { McpToolDescriptor(it, it, buildJsonObject { put("type", "object") }) }
+        override suspend fun call(name: String, arguments: JsonObject): McpResult { called += name; return McpResult("ok") }
+    }
+
+    /** 原名 → 任务里的名字。 */
+    private fun namesOf(tools: ToolDispatcher): Map<String, String> =
+        tools.definitions().filter { it.name.startsWith("mcp_") }.associate { it.description to it.name }
+
+    private val validName = Regex("^[A-Za-z0-9_]{1,$MCP_TOOL_NAME_MAX}$")
+
+    /** 设置里加的服务编号是 36 位的 UUID:原名长的工具名字也在上限以内、调得到;短的照旧。 */
+    @Test fun longToolNamesUnderAUuidServerStayWithinTheLimitAndStillRoute() = runBlocking {
+        val uuid = "3f2b6c1e-8d4a-4b7e-9c21-5a6f0e1d2c3b"
+        val long = listOf("list_repository_collaborators", "list_allowed_directories")
+        val endpoint = NamedEndpoint(uuid, long + "search")
+        val tools = toolDispatcher(FakeScreen(), mcpServers = listOf(McpConnection(endpoint)))
+        val names = namesOf(tools)
+        assertTrue(names.toString(), names.values.all(validName::matches))
+        assertEquals("mcp_3f2b6c1e_8d4a_4b7e_9c21_5a6f0e1d2c3b__search", names["search"])
+        assertEquals("mcp_3f2b6c1e__list_repository_collaborators_a11d7c62", names["list_repository_collaborators"])
+        assertEquals("mcp_3f2b6c1e__list_allowed_directories_02d44151", names["list_allowed_directories"])
+        for (original in long) {
+            val result = tools.execute(Part.ToolCall("c", names.getValue(original), "{}"), ActionPass())
+            assertEquals(JsonPrimitive(true), result.content["ok"])
+        }
+        assertEquals(long, endpoint.called)
+    }
+
+    /** 名字写死在这里:换一个进程、换一台设备算出来也得是这几个。前 41 个字符相同的两个长名字截到上限后还分得开。 */
+    @Test fun shortNamesArePinnedAndTruncatedWithinTheLimit() {
+        val uuid = "3f2b6c1e-8d4a-4b7e-9c21-5a6f0e1d2c3b"
+        assertEquals("mcp_3f2b6c1e_8d4a_4b7e_9c21_5a6f0e1d2c3b__" + "a".repeat(22), mcpToolName(uuid, "a".repeat(22)))
+        assertEquals("mcp_3f2b6c1e__" + "a".repeat(23) + "_20e42354", mcpToolName(uuid, "a".repeat(23)))
+        val long = listOf("manage_repository_notification_subscription", "manage_repository_notification_subscription_v2")
+        assertEquals(
+            listOf(
+                "mcp_3f2b6c1e__manage_repository_notification_subscripti_727e5643",
+                "mcp_3f2b6c1e__manage_repository_notification_subscripti_267a2d1c",
+            ),
+            mcpToolNames(uuid, long),
+        )
+        assertTrue(mcpToolNames(uuid, long).all { it.length == MCP_TOOL_NAME_MAX })
+        assertEquals(listOf("mcp_demo__get_user_186aa1ca", "mcp_demo__get_user_d94024c8"), mcpToolNames("demo", listOf("get-user", "get_user")))
+    }
+
+    /** 清洗后同名的几个都改名、各调各的;服务端换个顺序名字不变;不撞的照旧。 */
+    @Test fun namesThatCollideAfterCleaningAreAllRenamedStably() = runBlocking {
+        val listed = listOf("get-user", "get_user", "查询天气", "搜索新闻", "search")
+        val endpoint = NamedEndpoint("demo", listed)
+        val tools = toolDispatcher(FakeScreen(), mcpServers = listOf(McpConnection(endpoint)))
+        val names = namesOf(tools)
+        assertEquals(listed.toSet(), names.keys)
+        assertTrue(names.toString(), names.values.all(validName::matches))
+        assertEquals("mcp_demo__search", names["search"])
+        assertFalse(names.toString(), "mcp_demo__get_user" in names.values)
+        assertTrue(names.toString(), names.getValue("get-user").startsWith("mcp_demo__get_user_"))
+        for (original in listed) tools.execute(Part.ToolCall("c", names.getValue(original), "{}"), ActionPass())
+        assertEquals(listed, endpoint.called)
+        assertEquals(names, namesOf(toolDispatcher(FakeScreen(), mcpServers = listOf(McpConnection(NamedEndpoint("demo", listed.reversed()))))))
+    }
+
+    /** 服务端把同一个名字列了几次:只用第一个,任务照常开局,提示里写明。 */
+    @Test fun aToolListedSeveralTimesIsUsedOnceAndReported() {
+        fun tool(name: String, description: String) = McpToolDescriptor(name, description, buildJsonObject { put("type", "object") })
+        val endpoint = FakeEndpoint().apply { offered = listOf(tool("search", "first"), tool("search", "second"), tool("write", "Write"), tool("search", "third")) }
+        val tools = toolDispatcher(FakeScreen(), mcpServers = listOf(McpConnection(endpoint)))
+        val mcp = tools.definitions().filter { it.name.startsWith("mcp_") }
+        assertEquals(listOf("mcp_demo__search", "mcp_demo__write"), mcp.map { it.name })
+        assertEquals("first", mcp.first().description)
+        val diagnostics = tools.promptSections(tools.definitions()).joinToString("\n")
+        assertTrue(diagnostics, "'search': listed 3 times, only the first is used" in diagnostics)
     }
 }
