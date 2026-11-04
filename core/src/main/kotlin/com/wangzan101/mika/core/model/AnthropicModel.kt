@@ -149,7 +149,7 @@ class AnthropicModel(
         status == 401 || status == 403 -> ModelError.Auth()
         status == 402 || body.contains("credit balance is too low") -> ModelError.QuotaExceeded()
         status == 429 -> ModelError.RateLimited(HttpSupport.retryAfterMs(retryAfter))
-        status == 413 || body.contains("prompt is too long") -> ModelError.ContextTooLong()
+        status == 413 || body.contains("prompt is too long") || ModelHttp.contextTooLong(status, body) -> ModelError.ContextTooLong()
         status == 404 -> ModelError.ModelNotFound(model, ModelAccessErrors.jsonDetail(body))
         status == 529 || body.contains("overloaded_error") -> ModelError.Server(529)
         status in 500..599 -> ModelError.Server(status)
